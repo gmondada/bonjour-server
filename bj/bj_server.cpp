@@ -104,7 +104,7 @@ void Bj_server::send_unsolicited_announcements()
     */
 }
 
-Bj_server::Net_interface::Net_interface(std::string name, const std::vector<Bj_net_address>& addresses, std::vector<Bj_service> services)
+Bj_server::Net_interface::Net_interface(std::string name, const std::vector<Bj_net_address>& addresses, std::vector<Bj_service_instance> services)
     : addresses(addresses), host(name, addresses), service_collection(services)
 {
     auto host_domain = host.u2_dns_view();

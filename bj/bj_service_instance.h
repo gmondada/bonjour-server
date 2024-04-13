@@ -1,5 +1,5 @@
 //
-//  bj_service.h
+//  bj_service_instance.h
 //  bonjour-server
 //
 //  Created by Gabriele Mondada on 11.04.2024.
@@ -13,9 +13,9 @@
 #include <span>
 #include "u2_dns.h"
 
-class Bj_service {
+class Bj_service_instance {
 public:
-    Bj_service(std::string_view name, std::string_view regtype, std::optional<std::string_view> domain, uint16_t port, std::span<unsigned char> txt_record);
+    Bj_service_instance(std::string_view name, std::string_view regtype, std::optional<std::string_view> domain, uint16_t port, std::span<unsigned char> txt_record);
 
 private:
     std::string name;

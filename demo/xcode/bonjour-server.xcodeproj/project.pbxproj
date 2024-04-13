@@ -18,7 +18,7 @@
 		E06DA7E12BC9270A0073C740 /* bj_net.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7D02BC9270A0073C740 /* bj_net.cpp */; };
 		E06DA7E22BC9270A0073C740 /* bj_server.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7D22BC9270A0073C740 /* bj_server.cpp */; };
 		E06DA7E32BC9270A0073C740 /* bj_service_collection.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7D42BC9270A0073C740 /* bj_service_collection.cpp */; };
-		E06DA7E42BC9270A0073C740 /* bj_service.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7D62BC9270A0073C740 /* bj_service.cpp */; };
+		E06DA7E42BC9270A0073C740 /* bj_service_instance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7D62BC9270A0073C740 /* bj_service_instance.cpp */; };
 		E06DA7E52BC9270A0073C740 /* bj_static_server.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7D82BC9270A0073C740 /* bj_static_server.cpp */; };
 		E06DA7E62BC9270A0073C740 /* bj_util.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7DA2BC9270A0073C740 /* bj_util.cpp */; };
 		E06DA7F02BC9273D0073C740 /* bj_static_demo.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7EA2BC9273D0073C740 /* bj_static_demo.cpp */; };
@@ -62,8 +62,8 @@
 		E06DA7D32BC9270A0073C740 /* bj_server.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bj_server.h; sourceTree = "<group>"; };
 		E06DA7D42BC9270A0073C740 /* bj_service_collection.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = bj_service_collection.cpp; sourceTree = "<group>"; };
 		E06DA7D52BC9270A0073C740 /* bj_service_collection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bj_service_collection.h; sourceTree = "<group>"; };
-		E06DA7D62BC9270A0073C740 /* bj_service.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = bj_service.cpp; sourceTree = "<group>"; };
-		E06DA7D72BC9270A0073C740 /* bj_service.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bj_service.h; sourceTree = "<group>"; };
+		E06DA7D62BC9270A0073C740 /* bj_service_instance.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = bj_service_instance.cpp; sourceTree = "<group>"; };
+		E06DA7D72BC9270A0073C740 /* bj_service_instance.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bj_service_instance.h; sourceTree = "<group>"; };
 		E06DA7D82BC9270A0073C740 /* bj_static_server.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = bj_static_server.cpp; sourceTree = "<group>"; };
 		E06DA7D92BC9270A0073C740 /* bj_static_server.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bj_static_server.h; sourceTree = "<group>"; };
 		E06DA7DA2BC9270A0073C740 /* bj_util.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = bj_util.cpp; sourceTree = "<group>"; };
@@ -153,8 +153,8 @@
 				E06DA7D32BC9270A0073C740 /* bj_server.h */,
 				E06DA7D42BC9270A0073C740 /* bj_service_collection.cpp */,
 				E06DA7D52BC9270A0073C740 /* bj_service_collection.h */,
-				E06DA7D62BC9270A0073C740 /* bj_service.cpp */,
-				E06DA7D72BC9270A0073C740 /* bj_service.h */,
+				E06DA7D62BC9270A0073C740 /* bj_service_instance.cpp */,
+				E06DA7D72BC9270A0073C740 /* bj_service_instance.h */,
 				E06DA7D82BC9270A0073C740 /* bj_static_server.cpp */,
 				E06DA7D92BC9270A0073C740 /* bj_static_server.h */,
 				E06DA7DA2BC9270A0073C740 /* bj_util.cpp */,
@@ -234,7 +234,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E06DA7E62BC9270A0073C740 /* bj_util.cpp in Sources */,
-				E06DA7E42BC9270A0073C740 /* bj_service.cpp in Sources */,
+				E06DA7E42BC9270A0073C740 /* bj_service_instance.cpp in Sources */,
 				E06DA7F02BC9273D0073C740 /* bj_static_demo.cpp in Sources */,
 				E06DA7DF2BC9270A0073C740 /* bj_net_single_apple.cpp in Sources */,
 				E06DA7E02BC9270A0073C740 /* bj_host.cpp in Sources */,

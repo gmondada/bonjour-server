@@ -28,7 +28,7 @@ private:
         std::vector<const u2_dns_domain*> domains;
         u2_dns_database database;
 
-        Net_interface(std::string name, const std::vector<Bj_net_address>& addresses, std::vector<Bj_service> services);
+        Net_interface(std::string name, const std::vector<Bj_net_address>& addresses, std::vector<Bj_service_instance> services);
 
         // WARNING: `domains` amd `database` contain pointers to other class members. Moving this object makes them dangling.
         Net_interface(const Net_interface&) = delete;
@@ -38,7 +38,7 @@ private:
     std::string host_name;
     bool running = false;
     Bj_net& net;
-    std::vector<Bj_service> services;
+    std::vector<Bj_service_instance> services;
 
     std::map<int, std::shared_ptr<Net_interface>> interfaces;
 

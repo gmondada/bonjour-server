@@ -1,14 +1,14 @@
 //
-//  bj_service.cpp
+//  bj_service_instance.cpp
 //  bonjour-server
 //
 //  Created by Gabriele Mondada on 11.04.2024.
 //  Copyright © 2024 Gabriele Mondada. All rights reserved.
 //
 
-#include "bj_service.h"
+#include "bj_service_instance.h"
 
-Bj_service::Bj_service(std::string_view name, std::string_view regtype, std::optional<std::string_view> domain, uint16_t port, std::span<unsigned char> txt_record)
+Bj_service_instance::Bj_service_instance(std::string_view name, std::string_view regtype, std::optional<std::string_view> domain, uint16_t port, std::span<unsigned char> txt_record)
 {
     this->name = name;
     this->regtype = regtype;

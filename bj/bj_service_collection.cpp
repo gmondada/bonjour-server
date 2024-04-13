@@ -7,7 +7,7 @@
 
 #include "bj_service_collection.h"
 
-Bj_service_collection::Bj_service_collection(std::vector<Bj_service> services)
+Bj_service_collection::Bj_service_collection(std::vector<Bj_service_instance> services)
 {
     this->services = services;
 }
