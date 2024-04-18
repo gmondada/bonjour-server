@@ -65,19 +65,26 @@ struct Bj_net_address {
 class Bj_net_executor {
 public:
     virtual ~Bj_net_executor() {}
-    // virtual void invoke(std::function<void()>) = 0;
     virtual void invoke_async(std::function<void()>) const = 0;
 };
 
 using Bj_net_send = std::function<void(std::span<unsigned char> data)>;
-using Bj_net_rx_handler = std::function<void(std::span<unsigned char> data, int interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_send reply)>;
+
+// TODO: should we group these 3 handlers in a single delegate?
+using Bj_net_rx_begin_handler = std::function<void(int interface_id, const std::vector<Bj_net_address>& addresses)>;
+using Bj_net_rx_data_handler = std::function<void(int interface_id, std::span<unsigned char> data, Bj_net_send reply)>;
+using Bj_net_rx_end_handler = std::function<void(int interface_id)>;
 
 class Bj_net {
 public:
     virtual ~Bj_net() {};
 
     virtual const Bj_net_executor& executor() const = 0;
-    virtual void set_rx_handler(Bj_net_rx_handler rx_handler) = 0;
+
+    virtual void set_rx_begin_handler(Bj_net_rx_begin_handler rx_begin_handler) = 0;
+    virtual void set_rx_data_handler(Bj_net_rx_data_handler rx_data_handler) = 0;
+    virtual void set_rx_end_handler(Bj_net_rx_end_handler rx_end_handler) = 0;
+
     virtual void open() = 0;
     virtual void close(std::function<void()> completion) = 0;
 
