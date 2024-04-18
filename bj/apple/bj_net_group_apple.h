@@ -19,7 +19,9 @@ public:
     ~Bj_net_group_apple();
 
     const Bj_net_executor& executor() const override;
-    void set_rx_handler(Bj_net_rx_handler rx_handler) override;
+    void set_rx_begin_handler(Bj_net_rx_begin_handler rx_begin_handler) override;
+    void set_rx_data_handler(Bj_net_rx_data_handler rx_data_handler) override;
+    void set_rx_end_handler(Bj_net_rx_end_handler rx_end_handler) override;
     void open() override;
     void close(std::function<void()> completion) override;
     void send(std::span<unsigned char> data) override;
@@ -44,13 +46,16 @@ private:
         std::shared_ptr<Bj_net_single_apple> net;
     };
 
+    int log_level = 0;
     bool opened = false;
     Bj_net_executor_apple exec;
     nw_path_monitor_t path_monitor = nullptr;
     int interface_id_generator = 0;
 
     std::vector<Net_endpoint> endpoints;
-    Bj_net_rx_handler rx_handler;
+    Bj_net_rx_begin_handler rx_begin_handler;
+    Bj_net_rx_data_handler rx_data_handler;
+    Bj_net_rx_end_handler rx_end_handler;
     std::function<void()> close_completion;
 
     void update(Net_path net_path);

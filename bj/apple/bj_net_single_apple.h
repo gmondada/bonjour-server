@@ -20,7 +20,9 @@ public:
     Bj_net_single_apple(const Bj_net_address& bound_address, const std::vector<Bj_net_address>& interface_addresses, bool multicast, std::optional<Bj_net_executor_apple> executor = std::nullopt);
     ~Bj_net_single_apple();
     const Bj_net_executor& executor() const override;
-    void set_rx_handler(Bj_net_rx_handler rx_handler) override;
+    void set_rx_begin_handler(Bj_net_rx_begin_handler rx_handler) override;
+    void set_rx_data_handler(Bj_net_rx_data_handler rx_handler) override;
+    void set_rx_end_handler(Bj_net_rx_end_handler rx_handler) override;
     void open() override;
     void close(std::function<void()> completion) override;
 
@@ -32,18 +34,23 @@ private:
     bool multicast;
     Bj_net_executor_apple exec;
 
-    struct sockaddr_in grp;
-    int socket = -1;
+    struct sockaddr_in multicast_group;
+    int rx_socket = -1;
+    int tx_socket = -1;
     dispatch_source_t rx_source = nullptr;
 
     bool opened = false;
     std::mutex opened_mutex;
     std::condition_variable opened_cv;
 
-    Bj_net_rx_handler rx_handler;
+    Bj_net_rx_begin_handler rx_begin_handler;
+    Bj_net_rx_data_handler rx_data_handler;
+    Bj_net_rx_end_handler rx_end_handler;
     Bj_net_send reply_proxy;
 
     std::function<void()> close_completion;
+
+    void open_multicast();
     void reply(std::span<unsigned char> data);
-    void handle_rx();
+    void handle_rx_data();
 };

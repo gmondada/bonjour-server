@@ -8,8 +8,7 @@
 #include "bj_net_group_apple.h"
 #include <vector>
 #include <ifaddrs.h>
-//#include <net/if.h>
-//#include <iostream>
+#include <iostream>
 #include <netinet/in.h>
 #include <cstring>
 
@@ -24,10 +23,7 @@ static std::vector<Bj_net_address> get_ip_addresses(std::string_view interface_n
 
     struct ifaddrs *iface = head;
     while (iface) {
-        if (iface->ifa_addr != NULL && iface->ifa_name != NULL &&
-//            (iface->ifa_flags & IFF_UP) != 0 &&
-            interface_name == iface->ifa_name)
-        {
+        if (iface->ifa_addr != NULL && iface->ifa_name != NULL && interface_name == iface->ifa_name) {
             switch (iface->ifa_addr->sa_family) {
                 case AF_INET: {
                     struct sockaddr_in ipv4_addr = {};
@@ -87,12 +83,28 @@ const Bj_net_executor& Bj_net_group_apple::executor() const
     return exec;
 }
 
-void Bj_net_group_apple::set_rx_handler(Bj_net_rx_handler rx_handler)
+void Bj_net_group_apple::set_rx_begin_handler(Bj_net_rx_begin_handler rx_begin_handler)
 {
     if (opened)
-        throw std::logic_error("rx handler must be set before opening");
+        throw std::logic_error("rx handlers must be set before opening");
 
-    this->rx_handler = rx_handler;
+    this->rx_begin_handler = rx_begin_handler;
+}
+
+void Bj_net_group_apple::set_rx_data_handler(Bj_net_rx_data_handler rx_data_handler)
+{
+    if (opened)
+        throw std::logic_error("rx handlers must be set before opening");
+
+    this->rx_data_handler = rx_data_handler;
+}
+
+void Bj_net_group_apple::set_rx_end_handler(Bj_net_rx_end_handler rx_end_handler)
+{
+    if (opened)
+        throw std::logic_error("rx handlers must be set before opening");
+
+    this->rx_end_handler = rx_end_handler;
 }
 
 void Bj_net_group_apple::open()
@@ -128,8 +140,15 @@ void Bj_net_group_apple::send(std::span<unsigned char> data)
 
 void Bj_net_group_apple::update(Net_path net_path)
 {
+    if (log_level >= 1) {
+        nw_path_status_t status = nw_path_get_status(net_path.path);
+        std::cout << "path: ptr=" << net_path.path << " status=" << status << "\n";
+    }
+
     for (int i = 0; i < endpoints.size(); ++i) {
         if (endpoints[i].net_path == net_path) {
+            if (this->rx_end_handler)
+                this->rx_end_handler(endpoints[i].interface_id);
             std::shared_ptr<Bj_net_single_apple> net = endpoints[i].net;
             endpoints[i].net->close([net]() mutable {
                 net.reset();
@@ -139,16 +158,15 @@ void Bj_net_group_apple::update(Net_path net_path)
         }
     }
 
-//    nw_path_status_t status = nw_path_get_status(path);
-//    std::cout << "path " << path << ": status=" << status << "\n";
-
     nw_path_enumerate_interfaces(net_path.path, ^(nw_interface_t interface) {
         auto addresses = get_ip_addresses(nw_interface_get_name(interface));
 
-//        std::cout << "  interface: index=" << (int)nw_interface_get_index(interface) << " name=" << nw_interface_get_name(interface) << "\n";
-//        for (auto& address : addresses) {
-//            std::cout << "   " << address.as_str() << "\n";
-//        }
+        if (log_level >= 1) {
+            std::cout << "  interface: index=" << (int)nw_interface_get_index(interface) << " name=" << nw_interface_get_name(interface) << "\n";
+            for (auto& address : addresses) {
+                std::cout << "   " << address.as_str() << "\n";
+            }
+        }
 
         int interface_id = ++interface_id_generator;
 
@@ -156,8 +174,9 @@ void Bj_net_group_apple::update(Net_path net_path)
         bool first_ipv6 = true;
 
         for (auto &address : addresses) {
+            // not supporting ipv6 yet
             if (address.protocol != Bj_net_protocol::ipv4)
-                continue; // not supporting ipv6 now
+                continue;
 
             // we only subscribe one address per protocol to the multicast group
             bool multicast = false;
@@ -169,13 +188,19 @@ void Bj_net_group_apple::update(Net_path net_path)
                 first_ipv6 = false;
                 multicast = true;
             }
+
+            // not supporting queries sent directly to this host yet
+            if (!multicast)
+                continue;
+
             auto net = std::make_shared<Bj_net_single_apple>(address, addresses, multicast, exec);
-            net->set_rx_handler([this, interface_id](std::span<unsigned char> data, int sublayer_interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_send reply) {
-                if (this->rx_handler)
-                    this->rx_handler(data, interface_id, addresses, reply);
+            net->set_rx_data_handler([this, interface_id](int sublayer_interface_id, std::span<unsigned char> data, Bj_net_send reply) {
+                if (this->rx_data_handler)
+                    this->rx_data_handler(interface_id, data, reply);
             });
             try {
                 net->open();
+
                 Net_endpoint endpoint = {
                     .multicast = true,
                     .net_path = net_path,
@@ -185,8 +210,12 @@ void Bj_net_group_apple::update(Net_path net_path)
                     .net = net
                 };
                 endpoints.push_back(endpoint);
+
+                if (this->rx_begin_handler)
+                    this->rx_begin_handler(interface_id, addresses);
             } catch (Bj_net_open_error error) {
-                // do nothing
+                // error while opening - just do nothing with this interface
+                std::cout << address.as_str() << " cannot be used (" << error.what() << ")\n";
             }
         }
 
