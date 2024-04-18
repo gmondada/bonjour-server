@@ -15,7 +15,7 @@
 #include "u2_mdns.h"
 #include "bj_static_server.h"
 #include "bj_net_single_apple.h"
-
+#include "u2_dns_dump.h"
 
 #define _ENUM_SERVICE "\011_services\007_dns-sd\004_udp\005local\0"
 #define _SERVICE "\005_toto\004_udp\005local\0"
@@ -173,6 +173,8 @@ const struct u2_dns_database _database = {
 
 void bj_static_demo()
 {
+    u2_dns_database_dump(&_database, 0);
+
     Bj_net_single_apple net(Bj_net_address(Bj_net_protocol::ipv4), std::vector<Bj_net_address>(), true);
     Bj_static_server server(net, _database);
 

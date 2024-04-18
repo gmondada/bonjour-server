@@ -20,6 +20,6 @@ private:
     const struct u2_dns_database& database;
     Bj_net& net;
 
-    void rx_handler(std::span<unsigned char> data, int interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_send reply);
+    void rx_data_handler(int interface_id, std::span<unsigned char> data, Bj_net_send reply);
     void send_unsolicited_announcements();
 };

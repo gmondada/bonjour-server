@@ -19,8 +19,8 @@ void Bj_static_server::start()
 
     running = true;
 
-    Bj_net_rx_handler f = std::bind(&Bj_static_server::rx_handler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
-    net.set_rx_handler(f);
+    Bj_net_rx_data_handler f = std::bind(&Bj_static_server::rx_data_handler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    net.set_rx_data_handler(f);
 
     net.executor().invoke_async([this]() {
         net.open();
@@ -53,7 +53,7 @@ void Bj_static_server::stop()
     running = false;
 }
 
-void Bj_static_server::rx_handler(std::span<unsigned char> data, int interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_send reply)
+void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char> data, Bj_net_send reply)
 {
     bj_util::dump_data(data);
     u2_dns_msg_dump(data.data(), data.size(), 1);
