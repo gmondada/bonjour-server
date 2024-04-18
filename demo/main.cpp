@@ -6,9 +6,11 @@
 //
 
 #include "bj_static_demo.h"
+#include "bj_demo.h"
 
 int main(int argc, const char * argv[])
 {
-    bj_static_demo();
+    //bj_static_demo();
+    bj_demo();
     return 0;
 }
