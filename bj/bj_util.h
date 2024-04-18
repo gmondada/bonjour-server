@@ -7,10 +7,12 @@
 
 #pragma once
 #include <span>
+#include <string>
 
 namespace bj_util
 {
 
 void dump_data(std::span<unsigned char> data);
+std::string dns_name(std::string_view name);
 
 }
