@@ -20,6 +20,7 @@ void u2_dns_msg_dump_name(const void *data, int pos);
 void u2_dns_msg_dump_question(const void *data, const struct u2_dns_msg_entry *entry, int indent);
 void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, int indent);
 void u2_dns_msg_dump(const void *data, size_t size, int indent);
+void u2_dns_database_dump(const struct u2_dns_database *database, int indent);
 
 
 U2_C_END

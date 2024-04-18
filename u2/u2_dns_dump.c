@@ -302,3 +302,53 @@ void u2_dns_msg_dump(const void *data, size_t size, int indent)
         printf("%sdecoding error\n", prefix);
     }
 }
+
+void u2_dns_database_dump(const struct u2_dns_database *database, int indent)
+{
+    for (int i = 0; i < database->domain_count; i++) {
+        printf("%sdomain %d:\n", _prefix(indent), i);
+        const struct u2_dns_domain *domain = database->domain_list[i];
+        printf("%sname: ", _prefix(indent + 1));
+        u2_dns_msg_dump_name(domain->name, 0);
+        printf("\n");
+        for (int j = 0; j < domain->record_count; j++) {
+            printf("%srecord %d:\n", _prefix(indent + 1), j);
+            const struct u2_dns_record *record = domain->record_list[j];
+            const char *type_name = u2_dns_msg_type_to_str(record->type);
+            const char *prefix = _prefix(indent + 2);
+            printf("%stype:        %s\n", prefix, type_name);
+            printf("%scache_flush: %d\n", prefix, (int)record->cache_flush);
+            printf("%sttl:         %d\n", prefix, record->ttl);
+            switch (record->type) {
+                case U2_DNS_RR_TYPE_PTR:
+                    printf("%srdata:       ", prefix);
+                    u2_dns_msg_dump_name(record->ptr.name, 0);
+                    printf("\n");
+                    break;
+                case U2_DNS_RR_TYPE_A:
+                    printf("%saddr:        %d.%d.%d.%d\n", prefix, (int)record->a.addr[0], (int)record->a.addr[1], (int)record->a.addr[2], (int)record->a.addr[3]);
+                    break;
+                case U2_DNS_RR_TYPE_AAAA:
+                    printf("%saddr:        ", prefix);
+                    for (int i = 0; i < 16; i++) {
+                        if (i > 0 && (i % 2) == 0)
+                            printf(":");
+                        printf("%02x", (int)record->aaaa.addr[i]);
+                    }
+                    printf("\n");
+                    break;
+                case U2_DNS_RR_TYPE_NSEC: {
+                    break;
+                }
+                case U2_DNS_RR_TYPE_SRV:
+                    printf("%sport:        %d\n", prefix, record->srv.port);
+                    printf("%starget:      ", prefix);
+                    u2_dns_msg_dump_name(record->srv.name, 0);
+                    printf("\n");
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+}
