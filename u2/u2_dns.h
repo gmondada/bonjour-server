@@ -78,12 +78,12 @@ struct u2_dns_record {
 
 struct u2_dns_domain {
     const char *name;
-    const struct u2_dns_record **record_list;
+    const struct u2_dns_record *const *record_list;
     int record_count;
 };
 
 struct u2_dns_database {
-    const struct u2_dns_domain **domain_list;
+    const struct u2_dns_domain *const *domain_list;
     int domain_count;
 };
 
