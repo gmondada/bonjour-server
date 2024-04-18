@@ -1,6 +1,5 @@
 //
 //  bj_host.cpp
-//  bonjour-server
 //
 //  Created by Gabriele Mondada on 11.04.2024.
 //  Copyright © 2024 Gabriele Mondada. All rights reserved.

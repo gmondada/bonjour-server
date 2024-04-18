@@ -111,7 +111,7 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
                 }
                 if (!found && nsec_record) {
                     /*
-                     * Here we avoid redundat answers. We can do that only
+                     * Here we avoid redundant answers. We can do that only
                      * for answers stored in the list. When the list is full
                      * record_count could be overestimated.
                      */
@@ -127,7 +127,7 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
         }
     }
 
-    // remove knwon answers
+    // remove known answers
 
     if (!record_count)
         return 0;
@@ -192,7 +192,7 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
         }
     }
 
-    // remove invalidate answers
+    // remove invalidated answers
     // TODO
 
     return record_count;
@@ -227,7 +227,7 @@ static int _generate_additional_response_records(const struct u2_dns_database *d
                 for (int r=0; r<domain->record_count; r++) {
                     const struct u2_dns_record *record = domain->record_list[r];
                     /*
-                     * Here we avoid redundat answers. We can do that only
+                     * Here we avoid redundant answers. We can do that only
                      * for answers stored in the list. When the list is full
                      * record_count could be overestimated.
                      */
