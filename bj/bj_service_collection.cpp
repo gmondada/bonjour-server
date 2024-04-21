@@ -16,6 +16,20 @@ Bj_service_collection::Bj_service_collection(std::string_view host_name, std::st
     view_available = false;
 }
 
+Bj_service_collection::Bj_service_collection(const Bj_service_collection& service_collection)
+{
+    *this = service_collection;
+}
+
+Bj_service_collection& Bj_service_collection::operator= (const Bj_service_collection& service_collection)
+{
+    host_name = service_collection.host_name;
+    domain_name = service_collection.domain_name;
+    service_instances = service_collection.service_instances;
+    view_available = false;
+    return *this;
+}
+
 std::span<const u2_dns_domain*> Bj_service_collection::domains_view()
 {
     build_view();

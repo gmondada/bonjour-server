@@ -15,10 +15,10 @@ class Bj_host {
 
 public:
     Bj_host(std::string_view host_name, std::string_view domain_name, const std::vector<Bj_net_address>& addresses);
-    Bj_host(const Bj_host&) = delete;
-    Bj_host& operator= (const Bj_host&) = delete;
+    Bj_host(const Bj_host& host);
+    Bj_host& operator= (const Bj_host& host);
 
-    const u2_dns_domain* u2_dns_view();
+    const u2_dns_domain* domain_view();
 
 private:
     // input data

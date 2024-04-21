@@ -23,6 +23,7 @@
 		E06DA7E62BC9270A0073C740 /* bj_util.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7DA2BC9270A0073C740 /* bj_util.cpp */; };
 		E06DA7F02BC9273D0073C740 /* bj_static_demo.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7EA2BC9273D0073C740 /* bj_static_demo.cpp */; };
 		E06DA7F12BC9273D0073C740 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E06DA7EC2BC9273D0073C740 /* main.cpp */; };
+		E09021182BD5A821001B6859 /* bj_net_interface_database.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E09021162BD5A821001B6859 /* bj_net_interface_database.cpp */; };
 		E0A6D6112BCA72830088954B /* bj_service_instance.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E0A6D60F2BCA72830088954B /* bj_service_instance.cpp */; };
 		E0A6D6142BCA766A0088954B /* bj_service.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E0A6D6122BCA766A0088954B /* bj_service.cpp */; };
 /* End PBXBuildFile section */
@@ -73,6 +74,8 @@
 		E06DA7EA2BC9273D0073C740 /* bj_static_demo.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = bj_static_demo.cpp; sourceTree = "<group>"; };
 		E06DA7EB2BC9273D0073C740 /* bj_static_demo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bj_static_demo.h; sourceTree = "<group>"; };
 		E06DA7EC2BC9273D0073C740 /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
+		E09021162BD5A821001B6859 /* bj_net_interface_database.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = bj_net_interface_database.cpp; sourceTree = "<group>"; };
+		E09021172BD5A821001B6859 /* bj_net_interface_database.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bj_net_interface_database.h; sourceTree = "<group>"; };
 		E0A6D60F2BCA72830088954B /* bj_service_instance.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = bj_service_instance.cpp; sourceTree = "<group>"; };
 		E0A6D6102BCA72830088954B /* bj_service_instance.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bj_service_instance.h; sourceTree = "<group>"; };
 		E0A6D6122BCA766A0088954B /* bj_service.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = bj_service.cpp; sourceTree = "<group>"; };
@@ -163,6 +166,8 @@
 				E0A6D6132BCA766A0088954B /* bj_service.h */,
 				E06DA7D42BC9270A0073C740 /* bj_service_collection.cpp */,
 				E06DA7D52BC9270A0073C740 /* bj_service_collection.h */,
+				E09021162BD5A821001B6859 /* bj_net_interface_database.cpp */,
+				E09021172BD5A821001B6859 /* bj_net_interface_database.h */,
 				E06DA7D82BC9270A0073C740 /* bj_static_server.cpp */,
 				E06DA7D92BC9270A0073C740 /* bj_static_server.h */,
 				E06DA7D22BC9270A0073C740 /* bj_server.cpp */,
@@ -249,6 +254,7 @@
 				E06DA7E02BC9270A0073C740 /* bj_host.cpp in Sources */,
 				E06DA7C52BC926FA0073C740 /* u2_dns.c in Sources */,
 				E06DA7C42BC926FA0073C740 /* u2_dns_dump.c in Sources */,
+				E09021182BD5A821001B6859 /* bj_net_interface_database.cpp in Sources */,
 				E06DA7DE2BC9270A0073C740 /* bj_net_group_apple.cpp in Sources */,
 				E06DA7F12BC9273D0073C740 /* main.cpp in Sources */,
 				E06DA7E32BC9270A0073C740 /* bj_service_collection.cpp in Sources */,

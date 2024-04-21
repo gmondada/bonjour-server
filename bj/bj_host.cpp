@@ -15,7 +15,21 @@ Bj_host::Bj_host(std::string_view host_name, std::string_view domain_name, const
     view_available = false;
 }
 
-const u2_dns_domain* Bj_host::u2_dns_view()
+Bj_host::Bj_host(const Bj_host& host)
+{
+    *this = host;
+}
+
+Bj_host& Bj_host::operator= (const Bj_host& host)
+{
+    host_name = host.host_name;
+    domain_name = host.domain_name;
+    addresses = host.addresses;
+    view_available = false;
+    return *this;
+}
+
+const u2_dns_domain* Bj_host::domain_view()
 {
     build_view();
     return &domain;
@@ -28,6 +42,7 @@ void Bj_host::build_view()
 
     dns_host_name = bj_util::dns_name(host_name + "." + domain_name);
 
+    records.clear();
     for (auto &address : addresses) {
         u2_dns_record r = {
             .domain = &domain,
@@ -59,6 +74,7 @@ void Bj_host::build_view()
     };
     records.push_back(nsec);
 
+    record_ptrs.clear();
     for (auto& record : records) {
         record_ptrs.push_back(&record);
     }

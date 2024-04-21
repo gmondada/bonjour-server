@@ -13,8 +13,8 @@
 class Bj_service_collection {
 public:
     Bj_service_collection(std::string_view host_name, std::string_view domain_name, const std::vector<Bj_service_instance>& service_instances);
-    Bj_service_collection(const Bj_service_collection&) = delete;
-    Bj_service_collection& operator= (const Bj_service_collection&) = delete;
+    Bj_service_collection(const Bj_service_collection& service_collection);
+    Bj_service_collection& operator= (const Bj_service_collection& service_collection);
 
     std::span<const u2_dns_domain*> domains_view();
 
