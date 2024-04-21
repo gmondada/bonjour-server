@@ -12,6 +12,8 @@
 #include "u2_dns_dump.h"
 #include "u2_mdns.h"
 
+const size_t udp_msg_size_max = 1472;
+
 void Bj_static_server::start()
 {
     if (running)
@@ -59,7 +61,7 @@ void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char
     u2_dns_msg_dump(data.data(), data.size(), 1);
     printf("\n");
 
-    unsigned char out_msg[1472];
+    unsigned char out_msg[udp_msg_size_max];
     size_t out_size = u2_mdns_process_query(&database, data.data(), data.size(), out_msg, sizeof(out_msg));
     if (out_size) {
         reply(std::span(out_msg, out_size));
@@ -83,11 +85,10 @@ void Bj_static_server::send_unsolicited_announcements()
     }
 
     if (record_count) {
-        unsigned char data[1440];
-
-        size_t size = u2_mdns_generate_unsolicited_announcement(record_list, record_count, false, data, sizeof(data));
-        if (size) {
-            net.send(std::span(data, size));
+        unsigned char out_msg[udp_msg_size_max];
+        size_t out_size = u2_mdns_generate_unsolicited_announcement(record_list, record_count, false, out_msg, sizeof(out_msg));
+        if (out_size) {
+            net.send(std::span(out_msg, out_size));
         }
     }
 }
