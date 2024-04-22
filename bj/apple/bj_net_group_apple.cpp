@@ -107,6 +107,11 @@ void Bj_net_group_apple::set_rx_end_handler(Bj_net_rx_end_handler rx_end_handler
     this->rx_end_handler = rx_end_handler;
 }
 
+void Bj_net_group_apple::set_log_level(int log_level)
+{
+    this->log_level = log_level;
+}
+
 void Bj_net_group_apple::open()
 {
     if (opened)

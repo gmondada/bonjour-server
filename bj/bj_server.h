@@ -18,11 +18,13 @@
 class Bj_server {
 public:
     Bj_server(std::string_view host_name, Bj_net& net);
+    void set_log_level(int log_level);
     void start();
     void stop();
     void register_service(std::string_view instance_name, std::string_view service_name, uint16_t port, std::span<const char> txt_record);
 
 private:
+    int log_level = 0;
     std::string host_name;
     std::string domain_name;
     bool running = false;

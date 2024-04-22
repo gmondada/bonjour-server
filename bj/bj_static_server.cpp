@@ -14,6 +14,11 @@
 
 const size_t udp_msg_size_max = 1472;
 
+void Bj_static_server::set_log_level(int log_level)
+{
+    this->log_level = log_level;
+}
+
 void Bj_static_server::start()
 {
     if (running)
@@ -57,10 +62,12 @@ void Bj_static_server::stop()
 
 void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char> data, Bj_net_send reply)
 {
-    bj_util::dump_data(data);
-    u2_dns_msg_dump(data.data(), data.size(), 1);
-    printf("\n");
-
+    if (log_level >= 1) {
+        bj_util::dump_data(data);
+        u2_dns_msg_dump(data.data(), data.size(), 1);
+        printf("\n");
+    }
+    
     unsigned char out_msg[udp_msg_size_max];
     size_t out_size = u2_mdns_process_query(&database, data.data(), data.size(), out_msg, sizeof(out_msg));
     if (out_size) {

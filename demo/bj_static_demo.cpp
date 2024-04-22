@@ -176,7 +176,10 @@ void bj_static_demo()
     u2_dns_database_dump(&_database, 0);
 
     Bj_net_single_apple net(Bj_net_address(Bj_net_protocol::ipv4), std::vector<Bj_net_address>(), true);
+    net.set_log_level(1);
+    
     Bj_static_server server(net, _database);
+    server.set_log_level(2);
 
     server.start();
 

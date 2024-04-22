@@ -12,10 +12,12 @@
 class Bj_static_server {
 public:
     constexpr Bj_static_server(Bj_net& net, const struct u2_dns_database& database): net(net), database(database) {}
+    void set_log_level(int log_level);
     void start();
     void stop();
 
 private:
+    int log_level = 0;
     bool running = false;
     const struct u2_dns_database& database;
     Bj_net& net;

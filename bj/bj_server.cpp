@@ -20,6 +20,11 @@ Bj_server::Bj_server(std::string_view host_name, Bj_net& net) : host_name(host_n
     domain_name = "local";
 }
 
+void Bj_server::set_log_level(int log_level)
+{
+    this->log_level = log_level;
+}
+
 void Bj_server::start()
 {
     if (running)
@@ -86,7 +91,8 @@ void Bj_server::rx_begin_handler(int interface_id, const std::vector<Bj_net_addr
     Bj_service_collection service_collection(host_name, domain_name, service_instances);
     auto interface_db = std::make_shared<Bj_net_interface_database>(host, service_collection);
     interfaces[interface_id] = interface_db;
-    u2_dns_database_dump(interface_db->database_view(), 0);
+    if (log_level >= 1)
+        u2_dns_database_dump(interface_db->database_view(), 0);
     send_unsolicited_announcements(*interface_db);
 }
 
@@ -95,9 +101,11 @@ void Bj_server::rx_data_handler(int interface_id, std::span<unsigned char> data,
     auto interface_db = interfaces[interface_id];
     assert(interface_db);
 
-    bj_util::dump_data(data);
-    u2_dns_msg_dump(data.data(), data.size(), 1);
-    printf("\n");
+    if (log_level >= 2) {
+        bj_util::dump_data(data);
+        u2_dns_msg_dump(data.data(), data.size(), 1);
+        printf("\n");
+    }
 
     unsigned char out_msg[udp_msg_size_max];
     size_t out_size = u2_mdns_process_query(interface_db->database_view(), data.data(), data.size(), out_msg, sizeof(out_msg));

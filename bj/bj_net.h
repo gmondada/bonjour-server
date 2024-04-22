@@ -85,6 +85,8 @@ public:
     virtual void set_rx_data_handler(Bj_net_rx_data_handler rx_data_handler) = 0;
     virtual void set_rx_end_handler(Bj_net_rx_end_handler rx_end_handler) = 0;
 
+    virtual void set_log_level(int log_level) = 0;
+
     virtual void open() = 0;
     virtual void close(std::function<void()> completion) = 0;
 

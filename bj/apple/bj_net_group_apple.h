@@ -22,6 +22,7 @@ public:
     void set_rx_begin_handler(Bj_net_rx_begin_handler rx_begin_handler) override;
     void set_rx_data_handler(Bj_net_rx_data_handler rx_data_handler) override;
     void set_rx_end_handler(Bj_net_rx_end_handler rx_end_handler) override;
+    void set_log_level(int log_level) override;
     void open() override;
     void close(std::function<void()> completion) override;
     void send(std::span<unsigned char> data) override;
