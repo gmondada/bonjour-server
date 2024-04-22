@@ -67,12 +67,12 @@ void Bj_server::stop()
     running = false;
 }
 
-void Bj_server::register_service(std::string_view instance_name, std::string_view service_name, std::string_view domain_name, uint16_t port, std::span<const char> txt_record)
+void Bj_server::register_service(std::string_view instance_name, std::string_view service_name, uint16_t port, std::span<const char> txt_record)
 {
     auto service = Bj_service_instance(host_name, instance_name, service_name, domain_name, port, txt_record);
     net.executor().invoke_async([this, service]() {
         service_instances.push_back(service);
-        Bj_service_collection service_collection(host_name, this->domain_name, service_instances);
+        Bj_service_collection service_collection(host_name, domain_name, service_instances);
         for (auto& [_, interface_db] : interfaces) {
             interface_db->set_service_collection(service_collection);
         }

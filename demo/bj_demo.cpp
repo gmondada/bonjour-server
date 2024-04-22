@@ -17,9 +17,9 @@ void bj_demo()
     Bj_server server("TotoHost", net);
     auto txt = bj_util::dns_name("hello=123");
     std::span<const char> txt_span(txt.data(), txt.size());
-    server.register_service("Toto", "_toto._udp", "local", 1234, std::span<char>());
-    server.register_service("Toto2", "_toto._udp", "local", 1235, std::span<char>());
-    server.register_service("Toto3", "_toto-rapid._tcp", "local", 123, txt_span);
+    server.register_service("Toto", "_toto._udp", 1234, std::span<char>());
+    server.register_service("Toto2", "_toto._udp", 1235, std::span<char>());
+    server.register_service("Toto3", "_toto-rapid._tcp", 123, txt_span);
     server.start();
     
     for (;;) {

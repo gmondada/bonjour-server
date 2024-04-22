@@ -20,7 +20,7 @@ public:
     Bj_server(std::string_view host_name, Bj_net& net);
     void start();
     void stop();
-    void register_service(std::string_view instance_name, std::string_view service_name, std::string_view domain_name, uint16_t port, std::span<const char> txt_record);
+    void register_service(std::string_view instance_name, std::string_view service_name, uint16_t port, std::span<const char> txt_record);
 
 private:
     std::string host_name;
