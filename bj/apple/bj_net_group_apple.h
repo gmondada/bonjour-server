@@ -53,11 +53,13 @@ private:
     nw_path_monitor_t path_monitor = nullptr;
     int interface_id_generator = 0;
 
-    std::vector<Net_endpoint> endpoints;
     Bj_net_rx_begin_handler rx_begin_handler;
     Bj_net_rx_data_handler rx_data_handler;
     Bj_net_rx_end_handler rx_end_handler;
+
+    std::vector<Net_endpoint> endpoints;
     std::function<void()> close_completion;
+    size_t close_step_count = 0;
 
     void update(Net_path net_path);
     void cancel();

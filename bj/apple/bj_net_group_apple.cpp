@@ -230,9 +230,18 @@ void Bj_net_group_apple::update(Net_path net_path)
 
 void Bj_net_group_apple::cancel()
 {
-#warning TODO
-    // TODO: close all sub-net
-    opened = false;
-    close_completion();
-    close_completion = nullptr;
+    close_step_count = endpoints.size();
+    for (auto& endpoint : endpoints) {
+        endpoint.net->close([this]() {
+            close_step_count--;
+            if (close_step_count == 0) {
+                endpoints.clear();
+                opened = false;
+                auto f = close_completion;
+                close_completion = nullptr;
+                f();
+                return;
+            }
+        });
+    }
 }

@@ -27,6 +27,9 @@ void bj_demo()
 
     server.start();
 
+//    sleep(5);
+//    server.stop();
+
     for (;;) {
         sleep(3600);
     }

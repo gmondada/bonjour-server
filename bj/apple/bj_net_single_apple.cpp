@@ -95,8 +95,9 @@ void Bj_net_single_apple::close(std::function<void()> completion)
 
         me->opened = false;
 
-        me->close_completion();
+        auto f = me->close_completion;
         me->close_completion = nullptr;
+        f();
     });
     dispatch_source_cancel(rx_source);
     dispatch_release(rx_source);
