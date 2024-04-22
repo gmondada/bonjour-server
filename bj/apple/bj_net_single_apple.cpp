@@ -159,6 +159,20 @@ void Bj_net_single_apple::open_multicast()
             throw Bj_net_open_error("cannot configure the rx socket to be reused");
 
         /*
+         * We put the rx socket in non-blocking mode.
+         * Actually, it's not sure that this is really needed because the disptach source
+         * probably ensures that the handler is invoked only when there is some data
+         * to be read.
+         */
+        int flags = fcntl(rx_socket, F_GETFL);
+        if (flags == -1)
+            throw Bj_net_open_error("cannot get rx socket flags");
+        flags |= O_NONBLOCK;
+        int rv = fcntl(rx_socket, F_SETFL, flags);
+        if (rv == -1)
+            throw Bj_net_open_error("cannot put rx socket in non-blocking mode");
+
+        /*
          * Bind port.
          * This could sound strange, but it's correct: We do not bind the a local
          * interface, but to the multicast group IP.
@@ -213,6 +227,11 @@ void Bj_net_single_apple::reply(std::span<unsigned char> data)
 
 void Bj_net_single_apple::handle_rx_data()
 {
+    /*
+     * EINTR should not happen in non-blocking mode. Probably, it should not happen
+     * in the rx handler either. Same for EAGAIN.
+     * We just ignore them, as well as all other errors.
+     */
     size_t rv = recv(rx_socket, rx_buf.get(), rx_buf_size, 0);
     if (rv > 0 && rx_data_handler)
         rx_data_handler(0, std::span(rx_buf.get(), rv), reply_proxy);
