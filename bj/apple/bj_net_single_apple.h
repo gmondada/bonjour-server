@@ -10,6 +10,7 @@
 #include "bj_net_executor_apple.h"
 #include <dispatch/dispatch.h>
 #include <mutex>
+#include <memory>
 #include <condition_variable>
 #include <netinet/in.h>
 #include <optional>
@@ -39,6 +40,8 @@ private:
     int rx_socket = -1;
     int tx_socket = -1;
     dispatch_source_t rx_source = nullptr;
+    const size_t rx_buf_size = 65536;
+    std::unique_ptr<unsigned char[]> rx_buf;
 
     bool opened = false;
     std::mutex opened_mutex;

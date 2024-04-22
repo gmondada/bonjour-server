@@ -16,6 +16,7 @@ Bj_net_single_apple::Bj_net_single_apple(const Bj_net_address& bound_address, co
     this->bound_address = bound_address;
     this->interface_addresses = interface_addresses;
     this->reply_proxy = std::bind(&Bj_net_single_apple::reply, this, std::placeholders::_1);
+    this->rx_buf = std::make_unique<uint8_t[]>(rx_buf_size);
 }
 
 Bj_net_single_apple::~Bj_net_single_apple()
@@ -212,8 +213,7 @@ void Bj_net_single_apple::reply(std::span<unsigned char> data)
 
 void Bj_net_single_apple::handle_rx_data()
 {
-    unsigned char rx_buf[1440];
-    size_t rv = recv(rx_socket, rx_buf, sizeof(rx_buf), 0);
+    size_t rv = recv(rx_socket, rx_buf.get(), rx_buf_size, 0);
     if (rv > 0 && rx_data_handler)
-        rx_data_handler(0, std::span(rx_buf, rv), reply_proxy);
+        rx_data_handler(0, std::span(rx_buf.get(), rv), reply_proxy);
 }
