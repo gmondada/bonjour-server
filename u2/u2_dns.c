@@ -10,6 +10,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <limits.h>
 
 
 static int _skip_name(const void *data, int pos, int max)
@@ -21,10 +22,7 @@ static int _skip_name(const void *data, int pos, int max)
             return -1;
         uint8_t count = in[i];
         if (count == 0) {
-            i += 1;
-            if (i > max)
-                return -1;
-            return i;
+            return i + 1;
         } else if (count < 0xc0) {
             i += 1 + count;
             if (i >= max)
@@ -54,6 +52,76 @@ static uint8_t _reverse_bit_order(uint8_t b) {
     b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
     b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
     return b;
+}
+
+static int _get_next_entry(struct u2_dns_msg_reader *reader, struct u2_dns_msg_entry *entry)
+{
+    int pos = reader->pos;
+
+    int pos1 = pos;
+    int rv = _skip_name(reader->data, pos, reader->size);
+    if (rv < 0)
+        return -1;
+    pos = rv;
+    int pos2 = pos;
+
+    // parse question
+    if (reader->index < reader->q_count) {
+        if (pos + 4 > reader->size)
+            return -1;
+        pos += 4;
+        struct u2_dns_msg_entry tmp = {
+            .data = reader->data,
+            .name_pos = pos1,
+            .type_pos = pos2,
+            .rdata_len = 0,
+            .rdata_pos = pos
+        };
+        *entry = tmp;
+        reader->index++;
+        reader->pos = pos;
+        return 0;
+    }
+
+    // parse resource record
+    if (pos + 10 > reader->size)
+        return -1;
+    pos += 8;
+    int rsize = u2_dns_msg_get_field_u16(reader->data, pos);
+    pos += 2;
+    int pos3 = pos;
+    if (pos + rsize > reader->size)
+        return -1;
+    pos += rsize;
+    struct u2_dns_msg_entry tmp = {
+        .data = reader->data,
+        .name_pos = pos1,
+        .type_pos = pos2,
+        .rdata_len = rsize,
+        .rdata_pos = pos3
+    };
+    *entry = tmp;
+    reader->index++;
+    reader->pos = pos;
+    return 0;
+}
+
+static int _move_to_entry(struct u2_dns_msg_reader *reader, int index)
+{
+    if (index < 0 || index > reader->q_count + reader->rr_count)
+        return -1;
+    if (reader->index > index) {
+        // rewind
+        reader->pos = 12;
+        reader->index = 0;
+    }
+    while (reader->index < index) {
+        struct u2_dns_msg_entry entry;
+        int rv = _get_next_entry(reader, &entry);
+        if (rv < 0)
+            return -1;
+    }
+    return 0;
 }
 
 const char *u2_dns_msg_type_to_str(int type)
@@ -90,66 +158,6 @@ int u2_dns_msg_name_span(const void *msg, size_t size, int pos)
     if (end < 0)
         return -1;
     return end - pos;
-}
-
-/**
- * Check the structure of the given dns message and extract the list of entries. Return the number of entries
- * present in the message, whatever `max` is. This allows the caller to verify if the provider array is big enough.
- * In case of error, return a negative error code.
- * This function must be called first, before any other u2_dns_msg_xxx() function.
- */
-int u2_dns_msg_decompose(const void *msg, size_t size, struct u2_dns_msg_entry *entries, int max)
-{
-    int count;
-    int pos = 12;
-    int entry_index = 0;
-
-    if (size < 12)
-        return -1;
-
-    for (int j=0; j<4; j++) {
-        count = u2_dns_msg_get_field_u16(msg, 4 + 2 * j);
-        for (int i=0; i<count; i++) {
-            int pos1 = pos;
-            int rv = _skip_name(msg, pos, (int)size);
-            if (rv < 0)
-                return -1;
-            pos = rv;
-            int pos2 = pos;
-            if (j == 0) {
-                // question
-                if (pos + 4 > size)
-                    return -1;
-                pos += 4;
-                if (entry_index < max) {
-                    entries[entry_index].name_pos = pos1;
-                    entries[entry_index].type_pos = pos2;
-                    entries[entry_index].rdata_len = 0;
-                    entries[entry_index].rdata_pos = pos;
-                }
-            } else {
-                // resource record
-                if (pos + 10 > size)
-                    return -1;
-                pos += 8;
-                int rsize = u2_dns_msg_get_field_u16(msg, pos);
-                pos += 2;
-                int pos3 = pos;
-                if (pos + rsize > size)
-                    return -1;
-                pos += rsize;
-                if (entry_index < max) {
-                    entries[entry_index].name_pos = pos1;
-                    entries[entry_index].type_pos = pos2;
-                    entries[entry_index].rdata_len = rsize;
-                    entries[entry_index].rdata_pos = pos3;
-                }
-            }
-            entry_index++;
-        }
-    }
-
-    return entry_index;
 }
 
 bool u2_dns_name_init(char *name, size_t size)
@@ -238,6 +246,50 @@ int u2_dns_name_compare(const char *name1, const char *name2)
     if (len1 < len2)
         return -1;
     return memcmp(name1, name2, len1);
+}
+
+/**
+ * Initialize the reader.
+ * @return 0 = success, negative number = error
+ */
+int u2_dns_msg_reader_init(struct u2_dns_msg_reader *reader, const void *msg, size_t size)
+{
+    struct u2_dns_msg_reader tmp = {
+        .data = msg,
+        .size = (int)size,
+        .pos = 12
+    };
+    *reader = tmp;
+
+    if (size < 12 || size > INT_MAX) {
+        reader->index = -1;
+        return -1;
+    }
+
+    for (int j = 0; j < 4; j++) {
+        int count = u2_dns_msg_get_field_u16(msg, 4 + 2 * j);
+        if (j == 0)
+            reader->q_count = count;
+        else
+            reader->rr_count += count;
+    }
+
+    return 0;
+}
+
+/**
+ * Extract an entry from the message.
+ * This function is efficient if entries are retrieved in sequencial order.
+ * @return 0 = success, negative number = error
+ */
+int u2_dns_msg_reader_get_entry(struct u2_dns_msg_reader *reader, int index, struct u2_dns_msg_entry *entry)
+{
+    if (reader->index < 0)
+        return -1;
+    int rv = _move_to_entry(reader, index);
+    if (rv < 0)
+        return -1;
+    return _get_next_entry(reader, entry);
 }
 
 void u2_dns_msg_builder_init(struct u2_dns_msg_builder *builder, void *data, size_t size, int id, int flags)
@@ -368,7 +420,7 @@ bool u2_dns_msg_builder_add_rr_srv(struct u2_dns_msg_builder *builder, const cha
 bool u2_dns_msg_builder_add_rr_single_domain_nsec(struct u2_dns_msg_builder *builder, const char *name, bool cache_flush, int ttl, u2_dns_type_mask_t type_mask)
 {
     int nbytes = 1;
-    for (int i=0; i<sizeof(type_mask); i++) {
+    for (int i = 0; i < sizeof(type_mask); i++) {
         if ((type_mask >> (i * 8)) & 0xFF)
             nbytes = i + 1;
     }
@@ -399,7 +451,7 @@ bool u2_dns_msg_builder_add_rr_single_domain_nsec(struct u2_dns_msg_builder *bui
     i += 1;
     u2_dns_msg_set_field_u8(builder->data, i, nbytes);
     i += 1;
-    for (int j=0; j<nbytes; j++) {
+    for (int j = 0; j < nbytes; j++) {
         u2_dns_msg_set_field_u8(builder->data, i, _reverse_bit_order((uint8_t)(type_mask >> (j * 8))));
         i += 1;
     }

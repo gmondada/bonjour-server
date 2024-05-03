@@ -32,7 +32,7 @@ static bool _add_answer(struct u2_dns_msg_builder *builder, const struct u2_dns_
         case U2_DNS_RR_TYPE_NSEC: {
             // emit a nsec record which lists all record types available in this domain
             u2_dns_type_mask_t type_mask = 0;
-            for (int r=0; r<record->domain->record_count; r++) {
+            for (int r = 0; r < record->domain->record_count; r++) {
                 const struct u2_dns_record *record_it = record->domain->record_list[r];
                 if (record_it != record) {
                     if (record_it->type < 8 * sizeof(u2_dns_type_mask_t))
@@ -50,7 +50,7 @@ static bool _add_answer(struct u2_dns_msg_builder *builder, const struct u2_dns_
 
 static inline const struct u2_dns_response_record *_find_record(const struct u2_dns_response_record *record_list, int record_count, const struct u2_dns_record *record)
 {
-    for (int i=0; i<record_count; i++) {
+    for (int i = 0; i < record_count; i++) {
         const struct u2_dns_response_record *rr = &record_list[i];
         if (rr->record == record)
             return rr;
@@ -66,24 +66,34 @@ static inline const struct u2_dns_response_record *_find_record(const struct u2_
  */
 static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_database *database, struct u2_dns_response_record *record_list, int record_count, int record_max)
 {
-    struct u2_dns_msg_entry entries[32];
-    int rv = u2_dns_msg_decompose(msg_in, size_in, entries, U2_ARRAY_LEN(entries));
-    if (rv < 0 || rv > 32)
+    struct u2_dns_msg_reader reader;
+    int rv = u2_dns_msg_reader_init(&reader, msg_in, size_in);
+    if (rv < 0)
         return 0;
 
-    int flags = u2_dns_msg_get_flags(msg_in);
+    int flags = u2_dns_msg_reader_get_flags(&reader);
     if (flags & U2_DNS_MSG_FLAG_QR)
         return 0;
 
-    int qcount = u2_dns_msg_get_question_count(msg_in);
-    if (qcount > U2_ARRAY_LEN(entries))
-        qcount = U2_ARRAY_LEN(entries);
+    struct u2_dns_msg_entry entries[32];
+    int entry_count = u2_dns_msg_reader_get_entry_count(&reader);
+    if (entry_count > U2_ARRAY_LEN(entries))
+        entry_count = U2_ARRAY_LEN(entries);
+    for (int i = 0; i < entry_count; i++) {
+        rv = u2_dns_msg_reader_get_entry(&reader, i, entries + i);
+        if (rv < 0)
+            return 0;
+    }
 
-    for (int q=0; q<qcount; q++) {
+    int qcount = u2_dns_msg_reader_get_question_count(&reader);
+    if (qcount > entry_count)
+        qcount = entry_count; // TODO: should we generate a single message with the truncated flag or several messages?
+
+    for (int q = 0; q < qcount; q++) {
         const struct u2_dns_msg_entry *entry = entries + q;
 
-        int type = u2_dns_msg_get_question_type(msg_in, entry);
-        int klass = u2_dns_msg_get_question_class(msg_in, entry);
+        int type = u2_dns_msg_entry_get_question_type(entry);
+        int klass = u2_dns_msg_entry_get_question_class(entry);
         if (klass != 1 && klass != 255)
             continue;
 
@@ -91,12 +101,12 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
         u2_dns_name_init(name, 256);
         u2_dns_name_append_compressed_name(name, 256, msg_in, entry->name_pos);
 
-        for (int d=0; d<database->domain_count; d++) {
+        for (int d = 0; d < database->domain_count; d++) {
             const struct u2_dns_domain *domain = database->domain_list[d];
             if (!u2_dns_name_compare(domain->name, name)) {
                 bool found = false;
                 const struct u2_dns_record *nsec_record = NULL;
-                for (int r=0; r<domain->record_count; r++) {
+                for (int r = 0; r < domain->record_count; r++) {
                     const struct u2_dns_record *record = domain->record_list[r];
                     if (record->type == type) {
                         if (record_count < record_max) {
@@ -132,18 +142,18 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
     if (!record_count)
         return 0;
 
-    int acount = u2_dns_msg_get_answer_rr_count(msg_in);
-    if (acount > U2_ARRAY_LEN(entries) - qcount)
-        acount = U2_ARRAY_LEN(entries) - qcount;
+    int acount = u2_dns_msg_reader_get_answer_rr_count(&reader);
+    if (acount > entry_count - qcount)
+        acount = entry_count - qcount;
 
-    for (int a=qcount; a<qcount + acount; a++) {
+    for (int a = qcount; a < qcount + acount; a++) {
         const struct u2_dns_msg_entry *entry = entries + a;
 
-        int klass = u2_dns_msg_get_rr_class(msg_in, entry);
+        int klass = u2_dns_msg_entry_get_rr_class(entry);
         if (klass != 1 && klass != 255)
             continue;
 
-        int type = u2_dns_msg_get_rr_type(msg_in, entry);
+        int type = u2_dns_msg_entry_get_rr_type(entry);
         switch (type) {
             case U2_DNS_RR_TYPE_PTR: {
                 int span = u2_dns_msg_name_span(msg_in, size_in, entry->rdata_pos);
@@ -156,7 +166,7 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
                 continue;
         }
 
-        int ttl = u2_dns_msg_get_rr_ttl(msg_in, entry);
+        int ttl = u2_dns_msg_entry_get_rr_ttl(entry);
 
         char name[256];
         u2_dns_name_init(name, 256);
@@ -165,7 +175,7 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
         char buf[256];
         bool buf_in_use = false;
 
-        for (int r=0; r<record_count; r++) {
+        for (int r = 0; r < record_count; r++) {
             struct u2_dns_response_record *record = record_list + r;
             if (record->category != U2_DNS_RR_CATEGORY_ANSWER)
                 continue;
@@ -200,7 +210,7 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
 
 static int _generate_additional_response_records(const struct u2_dns_database *database, struct u2_dns_response_record *record_list, int record_count, int record_max)
 {
-    for (int i=0; i<record_count; i++) {
+    for (int i = 0; i < record_count; i++) {
         struct u2_dns_response_record *rr = &record_list[i];
 
         if (rr->category != U2_DNS_RR_CATEGORY_ANSWER && rr->category != U2_DNS_RR_CATEGORY_ADDITIONAL)
@@ -221,10 +231,10 @@ static int _generate_additional_response_records(const struct u2_dns_database *d
         if (!name)
             continue;
 
-        for (int d=0; d<database->domain_count; d++) {
+        for (int d = 0; d < database->domain_count; d++) {
             const struct u2_dns_domain *domain = database->domain_list[d];
             if (domain->name == name) {
-                for (int r=0; r<domain->record_count; r++) {
+                for (int r = 0; r < domain->record_count; r++) {
                     const struct u2_dns_record *record = domain->record_list[r];
                     /*
                      * Here we avoid redundant answers. We can do that only
@@ -250,7 +260,7 @@ static size_t _emit_response(void *out_msg, size_t out_msg_max, struct u2_dns_re
     struct u2_dns_msg_builder builder;
     u2_dns_msg_builder_init(&builder, out_msg, out_msg_max, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
 
-    for (int i=0; i<record_count; i++) {
+    for (int i = 0; i < record_count; i++) {
         struct u2_dns_response_record *rr = &record_list[i];
         if (rr->category == U2_DNS_RR_CATEGORY_ANSWER) {
             _add_answer(&builder, rr->record, false);
@@ -259,7 +269,7 @@ static size_t _emit_response(void *out_msg, size_t out_msg_max, struct u2_dns_re
 
     u2_dns_msg_builder_set_category(&builder, U2_DNS_RR_CATEGORY_ADDITIONAL);
 
-    for (int i=0; i<record_count; i++) {
+    for (int i = 0; i < record_count; i++) {
         struct u2_dns_response_record *rr = &record_list[i];
         if (rr->category == U2_DNS_RR_CATEGORY_ADDITIONAL) {
             _add_answer(&builder, rr->record, false);
@@ -291,7 +301,7 @@ size_t u2_mdns_generate_unsolicited_announcement(const struct u2_dns_record **re
     struct u2_dns_msg_builder builder;
     u2_dns_msg_builder_init(&builder, msg_out, max_out, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
 
-    for (int i=0; i<record_count; i++) {
+    for (int i = 0; i < record_count; i++) {
         const struct u2_dns_record *r = record_list[i];
         _add_answer(&builder, r, tear_down);
     }

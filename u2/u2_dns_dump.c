@@ -34,7 +34,7 @@ void u2_dns_msg_dump_name(const void *data, int pos)
             putchar('.');
         if (count < 0xc0) {
             i++;
-            for (int j=0; j<count; j++) {
+            for (int j = 0; j < count; j++) {
                 uint8_t c = in[i];
                 i++;
                 if (c == '\0') {
@@ -70,32 +70,32 @@ void u2_dns_msg_dump_name(const void *data, int pos)
     }
 }
 
-void u2_dns_msg_dump_question(const void *data, const struct u2_dns_msg_entry *entry, int indent)
+void u2_dns_msg_dump_question(const struct u2_dns_msg_entry *entry, int indent)
 {
     const char *prefix = _prefix(indent);
     printf("%sname:  ", prefix);
-    u2_dns_msg_dump_name(data, entry->name_pos);
+    u2_dns_msg_dump_name(entry->data, entry->name_pos);
     printf("\n");
-    int type = u2_dns_msg_get_question_type(data, entry);
+    int type = u2_dns_msg_entry_get_question_type(entry);
     printf("%stype:  %d (%s)\n", prefix, type, u2_dns_msg_type_to_str(type));
-    int klass = u2_dns_msg_get_question_class(data, entry);
+    int klass = u2_dns_msg_entry_get_question_class(entry);
     printf("%sclass: %d\n", prefix, klass);
-    bool unicast_response = u2_dns_msg_get_question_unicast_response(data, entry);
+    bool unicast_response = u2_dns_msg_entry_get_question_unicast_response(entry);
     printf("%sunicast_response: %d\n", prefix, (int)unicast_response);
 }
 
-void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, int indent)
+void u2_dns_msg_dump_rr(const struct u2_dns_msg_entry *entry, int indent)
 {
     const char *prefix = _prefix(indent);
     printf("%sname: ", prefix);
-    u2_dns_msg_dump_name(data, entry->name_pos);
+    u2_dns_msg_dump_name(entry->data, entry->name_pos);
     printf("\n");
-    int type = u2_dns_msg_get_rr_type(data, entry);
+    int type = u2_dns_msg_entry_get_rr_type(entry);
     printf("%stype: %d (%s)\n", prefix, type, u2_dns_msg_type_to_str(type));
-    int klass = u2_dns_msg_get_rr_class(data, entry);
-    bool cache_flush = u2_dns_msg_get_rr_cache_flush(data, entry);
-    int ttl = u2_dns_msg_get_rr_ttl(data, entry);
-    uint8_t *rdata = ((uint8_t *)data) + entry->rdata_pos;
+    int klass = u2_dns_msg_entry_get_rr_class(entry);
+    bool cache_flush = u2_dns_msg_entry_get_rr_cache_flush(entry);
+    int ttl = u2_dns_msg_entry_get_rr_ttl(entry);
+    const uint8_t *rdata = entry->data + entry->rdata_pos;
     int rsize = entry->rdata_len;
     int rpos = entry->rdata_pos;
     switch (type) {
@@ -104,11 +104,11 @@ void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, 
             printf("%scache_flush: %d\n", prefix, (int)cache_flush);
             printf("%sttl:         %d\n", prefix, ttl);
             printf("%srdata:       ", prefix);
-            int span = u2_dns_msg_name_span(data, rpos + rsize, rpos);
+            int span = u2_dns_msg_name_span(entry->data, rpos + rsize, rpos);
             if (span != rsize)
                 printf("<format error>");
             else
-                u2_dns_msg_dump_name(data, rpos);
+                u2_dns_msg_dump_name(entry->data, rpos);
             printf("\n");
             break;
         case U2_DNS_RR_TYPE_A:
@@ -141,11 +141,11 @@ void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, 
             printf("%scache_flush: %d\n", prefix, (int)cache_flush);
             printf("%sttl:         %d\n", prefix, ttl);
             printf("%sname:        ", prefix);
-            int span = u2_dns_msg_name_span(data, rpos + rsize, rpos);
+            int span = u2_dns_msg_name_span(entry->data, rpos + rsize, rpos);
             if (span < 0)
                 printf("<format error>");
             else
-                u2_dns_msg_dump_name(data, rpos);
+                u2_dns_msg_dump_name(entry->data, rpos);
             printf("\n");
             printf("%stypes:       ", prefix);
             int p = span;
@@ -165,9 +165,9 @@ void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, 
                     printf("<format error>");
                     break;
                 }
-                for (int i=0; i<count; i++) {
+                for (int i = 0; i < count; i++) {
                     uint8_t mask = rdata[p];
-                    for (int j=0; j<8; j++) {
+                    for (int j = 0; j < 8; j++) {
                         if (mask & 0x80) {
                             if (first)
                                 first = false;
@@ -199,11 +199,11 @@ void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, 
                 printf("%sweight:      %d\n", prefix, weight);
                 printf("%sport:        %d\n", prefix, port);
                 printf("%starget:      ", prefix);
-                int span = u2_dns_msg_name_span(data, rpos + rsize, rpos + 6);
+                int span = u2_dns_msg_name_span(entry->data, rpos + rsize, rpos + 6);
                 if (span + 6 != rsize)
                     printf("<format error>");
                 else
-                    u2_dns_msg_dump_name(data, rpos + 6);
+                    u2_dns_msg_dump_name(entry->data, rpos + 6);
                 printf("\n");
             }
             break;
@@ -211,13 +211,13 @@ void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, 
             printf("%sudp payload: %d\n", prefix, klass | (cache_flush ? 0x8000 : 0));
             printf("%sflags:       0x%08x\n", prefix, ttl);
             printf("%srdata:      ", prefix);
-            for (int i=0; i<rsize;) {
+            for (int i = 0; i < rsize;) {
                 if (i + 4 > rsize) {
                     printf(" <format error>");
                     break;
                 }
-                int code = u2_dns_msg_get_field_u16(data, rpos + i);
-                int size = u2_dns_msg_get_field_u16(data, rpos + i + 2);
+                int code = u2_dns_msg_get_field_u16(entry->data, rpos + i);
+                int size = u2_dns_msg_get_field_u16(entry->data, rpos + i + 2);
                 if (i + 4 + size > rsize) {
                     printf(" <format error>");
                     break;
@@ -232,7 +232,7 @@ void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, 
             printf("%scache_flush: %d\n", prefix, (int)cache_flush);
             printf("%sttl:         %d\n", prefix, ttl);
             printf("%srdata:       ", prefix);
-            for (int i=0; i<rsize; i++) {
+            for (int i = 0; i < rsize; i++) {
                 uint8_t c = rdata[i];
                 if (c == '\0') {
                     printf("\\0");
@@ -258,48 +258,69 @@ void u2_dns_msg_dump_rr(const void *data, const struct u2_dns_msg_entry *entry, 
 void u2_dns_msg_dump(const void *data, size_t size, int indent)
 {
     const char *prefix = _prefix(indent);
-    struct u2_dns_msg_entry entries[32];
-    int rv = u2_dns_msg_decompose(data, size, entries, 32);
-    if (rv >= 0 && rv <= 32) {
-        uint16_t id = u2_dns_msg_get_id(data);
-        printf("%sid: %d\n", prefix, id);
-        uint16_t flags = u2_dns_msg_get_flags(data);
-        printf("%sflags: 0x%04x", prefix, flags);
-        if (flags & U2_DNS_MSG_FLAG_QR)
-            printf(" response");
-        else
-            printf(" query");
-        if (flags & U2_DNS_MSG_FLAG_AA)
-            printf(" AA");
-        printf("\n");
+    struct u2_dns_msg_reader reader;
+    int rv = u2_dns_msg_reader_init(&reader, data, size);
+    if (rv < 0) {
+        printf("%serror: %d\n", prefix, rv);
+        return;
+    }
+    int id = u2_dns_msg_reader_get_id(&reader);
+    printf("%sid: %d\n", prefix, id);
+    int flags = u2_dns_msg_reader_get_flags(&reader);
+    printf("%sflags: 0x%04x", prefix, flags);
+    if (flags & U2_DNS_MSG_FLAG_QR)
+        printf(" response");
+    else
+        printf(" query");
+    if (flags & U2_DNS_MSG_FLAG_AA)
+        printf(" AA");
+    printf("\n");
 
-        int entry_index = 0;
-        int count = u2_dns_msg_get_question_count(data);
-        for (int i=0; i<count; i++) {
-            printf("%squestion %d:\n", prefix, i);
-            u2_dns_msg_dump_question(data, entries + entry_index, indent + 1);
-            entry_index++;
+    struct u2_dns_msg_entry entry;
+    int index = 0;
+    int count = u2_dns_msg_reader_get_question_count(&reader);
+    for (int i = 0; i < count; i++) {
+        printf("%squestion %d:\n", prefix, i);
+        int rv = u2_dns_msg_reader_get_entry(&reader, index, &entry);
+        if (rv < 0) {
+            printf("%serror: %d\n", _prefix(indent + 1), rv);
+            return;
         }
-        count = u2_dns_msg_get_answer_rr_count(data);
-        for (int i=0; i<count; i++) {
-            printf("%sanswer_rr %d:\n", prefix, i);
-            u2_dns_msg_dump_rr(data, entries + entry_index, indent + 1);
-            entry_index++;
+        u2_dns_msg_dump_question(&entry, indent + 1);
+        index++;
+    }
+    count = u2_dns_msg_reader_get_answer_rr_count(&reader);
+    for (int i = 0; i < count; i++) {
+        printf("%sanswer_rr %d:\n", prefix, i);
+        int rv = u2_dns_msg_reader_get_entry(&reader, index, &entry);
+        if (rv < 0) {
+            printf("%serror: %d\n", _prefix(indent + 1), rv);
+            return;
         }
-        count = u2_dns_msg_get_authority_rr_count(data);
-        for (int i=0; i<count; i++) {
-            printf("%sauthority_rr %d:\n", prefix, i);
-            u2_dns_msg_dump_rr(data, entries + entry_index, indent + 1);
-            entry_index++;
+        u2_dns_msg_dump_rr(&entry, indent + 1);
+        index++;
+    }
+    count = u2_dns_msg_reader_get_authority_rr_count(&reader);
+    for (int i = 0; i < count; i++) {
+        printf("%sauthority_rr %d:\n", prefix, i);
+        int rv = u2_dns_msg_reader_get_entry(&reader, index, &entry);
+        if (rv < 0) {
+            printf("%serror: %d\n", _prefix(indent + 1), rv);
+            return;
         }
-        count = u2_dns_msg_get_additional_rr_count(data);
-        for (int i=0; i<count; i++) {
-            printf("%sadditional_rr %d:\n", prefix, i);
-            u2_dns_msg_dump_rr(data, entries + entry_index, indent + 1);
-            entry_index++;
+        u2_dns_msg_dump_rr(&entry, indent + 1);
+        index++;
+    }
+    count = u2_dns_msg_reader_get_additional_rr_count(&reader);
+    for (int i = 0; i < count; i++) {
+        printf("%sadditional_rr %d:\n", prefix, i);
+        int rv = u2_dns_msg_reader_get_entry(&reader, index, &entry);
+        if (rv < 0) {
+            printf("%serror: %d\n", _prefix(indent + 1), rv);
+            return;
         }
-    } else {
-        printf("%sdecoding error\n", prefix);
+        u2_dns_msg_dump_rr(&entry, indent + 1);
+        index++;
     }
 }
 

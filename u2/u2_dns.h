@@ -88,10 +88,20 @@ struct u2_dns_database {
 };
 
 struct u2_dns_msg_entry {
+    const uint8_t *data;
     uint16_t name_pos;
     uint16_t type_pos;
     uint16_t rdata_pos;
     uint16_t rdata_len;
+};
+
+struct u2_dns_msg_reader {
+    const uint8_t *data;
+    int size;
+    int q_count;
+    int rr_count;
+    int index; // next entry index, negative in case of error
+    int pos;   // next entry offset
 };
 
 struct u2_dns_msg_builder {
@@ -106,13 +116,15 @@ struct u2_dns_msg_builder {
 
 const char *u2_dns_msg_type_to_str(int type);
 int u2_dns_msg_name_span(const void *msg, size_t size, int pos);
-int u2_dns_msg_decompose(const void *msg, size_t size, struct u2_dns_msg_entry *entries, int max);
 
 bool u2_dns_name_init(char *name, size_t size);
 int u2_dns_name_length(const void *name);
 bool u2_dns_name_append_label(char *name, size_t size, char *label);
 bool u2_dns_name_append_compressed_name(char *name, size_t size, const void *data, int pos);
 int u2_dns_name_compare(const char *name1, const char *name2);
+
+int u2_dns_msg_reader_init(struct u2_dns_msg_reader *reader, const void *msg, size_t size);
+int u2_dns_msg_reader_get_entry(struct u2_dns_msg_reader *reader, int index, struct u2_dns_msg_entry *entry);
 
 void u2_dns_msg_builder_init(struct u2_dns_msg_builder *builder, void *data, size_t size, int id, int flags);
 void u2_dns_msg_builder_set_category(struct u2_dns_msg_builder *builder, enum u2_dns_rr_category category);
@@ -169,69 +181,88 @@ static inline void u2_dns_msg_set_field_u32(void *data, int pos, uint32_t value)
     p[3] = value;
 }
 
-static inline int u2_dns_msg_get_id(const void *data)
+static inline int u2_dns_msg_reader_get_id(struct u2_dns_msg_reader *reader)
 {
-    return u2_dns_msg_get_field_u16(data, 0);
+    if (reader->index < 0)
+        return 0;
+    return u2_dns_msg_get_field_u16(reader->data, 0);
 }
 
-static inline int u2_dns_msg_get_flags(const void *data)
+static inline int u2_dns_msg_reader_get_flags(struct u2_dns_msg_reader *reader)
 {
-    return u2_dns_msg_get_field_u16(data, 2);
+    if (reader->index < 0)
+        return 0;
+    return u2_dns_msg_get_field_u16(reader->data, 2);
 }
 
-static inline int u2_dns_msg_get_question_count(const void *data)
+static inline int u2_dns_msg_reader_get_entry_count(struct u2_dns_msg_reader *reader)
 {
-    return u2_dns_msg_get_field_u16(data, 4);
+    if (reader->index < 0)
+        return 0;
+    return reader->q_count + reader->rr_count;
 }
 
-static inline int u2_dns_msg_get_answer_rr_count(const void *data)
+static inline int u2_dns_msg_reader_get_question_count(struct u2_dns_msg_reader *reader)
 {
-    return u2_dns_msg_get_field_u16(data, 6);
+    if (reader->index < 0)
+        return 0;
+    return reader->q_count;
 }
 
-static inline int u2_dns_msg_get_authority_rr_count(const void *data)
+static inline int u2_dns_msg_reader_get_answer_rr_count(struct u2_dns_msg_reader *reader)
 {
-    return u2_dns_msg_get_field_u16(data, 8);
+    if (reader->index < 0)
+        return 0;
+    return u2_dns_msg_get_field_u16(reader->data, 6);
 }
 
-static inline int u2_dns_msg_get_additional_rr_count(const void *data)
+static inline int u2_dns_msg_reader_get_authority_rr_count(struct u2_dns_msg_reader *reader)
 {
-    return u2_dns_msg_get_field_u16(data, 10);
+    if (reader->index < 0)
+        return 0;
+    return u2_dns_msg_get_field_u16(reader->data, 8);
 }
 
-static inline int u2_dns_msg_get_question_type(const void *data, const struct u2_dns_msg_entry *entry)
+static inline int u2_dns_msg_reader_get_additional_rr_count(struct u2_dns_msg_reader *reader)
 {
-    return u2_dns_msg_get_field_u16(data, entry->type_pos);
+    if (reader->index < 0)
+        return 0;
+    return u2_dns_msg_get_field_u16(reader->data, 10);
 }
 
-static inline bool u2_dns_msg_get_question_unicast_response(const void *data, const struct u2_dns_msg_entry *entry)
+static inline int u2_dns_msg_entry_get_question_type(const struct u2_dns_msg_entry *entry)
 {
-    return (u2_dns_msg_get_field_u8(data, entry->type_pos + 2) & 0x80) != 0;
+    return u2_dns_msg_get_field_u16(entry->data, entry->type_pos);
 }
 
-static inline int u2_dns_msg_get_question_class(const void *data, const struct u2_dns_msg_entry *entry)
+static inline bool u2_dns_msg_entry_get_question_unicast_response(const struct u2_dns_msg_entry *entry)
 {
-    return u2_dns_msg_get_field_u16(data, entry->type_pos + 2) & 0x7fff;
+    return (u2_dns_msg_get_field_u8(entry->data, entry->type_pos + 2) & 0x80) != 0;
 }
 
-static inline int u2_dns_msg_get_rr_type(const void *data, const struct u2_dns_msg_entry *entry)
+static inline int u2_dns_msg_entry_get_question_class(const struct u2_dns_msg_entry *entry)
 {
-    return u2_dns_msg_get_field_u16(data, entry->type_pos);
+    return u2_dns_msg_get_field_u16(entry->data, entry->type_pos + 2) & 0x7fff;
 }
 
-static inline bool u2_dns_msg_get_rr_cache_flush(const void *data, const struct u2_dns_msg_entry *entry)
+static inline int u2_dns_msg_entry_get_rr_type(const struct u2_dns_msg_entry *entry)
 {
-    return (u2_dns_msg_get_field_u8(data, entry->type_pos + 2) & 0x80) != 0;
+    return u2_dns_msg_get_field_u16(entry->data, entry->type_pos);
 }
 
-static inline int u2_dns_msg_get_rr_class(const void *data, const struct u2_dns_msg_entry *entry)
+static inline bool u2_dns_msg_entry_get_rr_cache_flush(const struct u2_dns_msg_entry *entry)
 {
-    return u2_dns_msg_get_field_u16(data, entry->type_pos + 2) & 0x7fff;
+    return (u2_dns_msg_get_field_u8(entry->data, entry->type_pos + 2) & 0x80) != 0;
 }
 
-static inline int u2_dns_msg_get_rr_ttl(const void *data, const struct u2_dns_msg_entry *entry)
+static inline int u2_dns_msg_entry_get_rr_class(const struct u2_dns_msg_entry *entry)
 {
-    return u2_dns_msg_get_field_u32(data, entry->type_pos + 4);
+    return u2_dns_msg_get_field_u16(entry->data, entry->type_pos + 2) & 0x7fff;
+}
+
+static inline int u2_dns_msg_entry_get_rr_ttl(const struct u2_dns_msg_entry *entry)
+{
+    return u2_dns_msg_get_field_u32(entry->data, entry->type_pos + 4);
 }
 
 
