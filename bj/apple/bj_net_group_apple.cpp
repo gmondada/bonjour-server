@@ -152,8 +152,6 @@ void Bj_net_group_apple::update(Net_path net_path)
 
     for (int i = 0; i < endpoints.size(); ++i) {
         if (endpoints[i].net_path == net_path) {
-            if (this->rx_end_handler)
-                this->rx_end_handler(endpoints[i].interface_id);
             std::shared_ptr<Bj_net_single_apple> net = endpoints[i].net;
             endpoints[i].net->close([net]() mutable {
                 net.reset();
@@ -199,28 +197,36 @@ void Bj_net_group_apple::update(Net_path net_path)
                 continue;
 
             auto net = std::make_shared<Bj_net_single_apple>(address, addresses, multicast, exec);
+            net->set_rx_begin_handler([this, interface_id](int sublayer_interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_mtu mtu) {
+                if (this->rx_begin_handler)
+                    this->rx_begin_handler(interface_id, addresses, mtu);
+            });
             net->set_rx_data_handler([this, interface_id](int sublayer_interface_id, std::span<unsigned char> data, Bj_net_send reply) {
                 if (this->rx_data_handler)
                     this->rx_data_handler(interface_id, data, reply);
             });
+            net->set_rx_end_handler([this, interface_id](int sublayer_interface_id) {
+                if (this->rx_end_handler)
+                    this->rx_end_handler(interface_id);
+            });
+
+            Net_endpoint endpoint = {
+                .multicast = true,
+                .net_path = net_path,
+                .interface_id = interface_id,
+                .interface_name = nw_interface_get_name(interface),
+                .addresses = addresses,
+                .net = net
+            };
+            endpoints.push_back(endpoint);
+
             try {
                 net->open();
-
-                Net_endpoint endpoint = {
-                    .multicast = true,
-                    .net_path = net_path,
-                    .interface_id = interface_id,
-                    .interface_name = nw_interface_get_name(interface),
-                    .addresses = addresses,
-                    .net = net
-                };
-                endpoints.push_back(endpoint);
-
-                if (this->rx_begin_handler)
-                    this->rx_begin_handler(interface_id, addresses);
             } catch (Bj_net_open_error error) {
-                // error while opening - just do nothing with this interface
+                // error while opening - this interface cannot be used
                 std::cout << address.as_str() << " cannot be used (" << error.what() << ")\n";
+
+                endpoints.pop_back();
             }
         }
 

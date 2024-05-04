@@ -62,6 +62,12 @@ struct Bj_net_address {
     };
 };
 
+struct Bj_net_mtu {
+    size_t mtu;
+    size_t ip_header_size;
+    size_t udp_header_size;
+};
+
 class Bj_net_executor {
 public:
     virtual ~Bj_net_executor() {}
@@ -71,7 +77,7 @@ public:
 using Bj_net_send = std::function<void(std::span<unsigned char> data)>;
 
 // TODO: should we group these 3 handlers in a single delegate?
-using Bj_net_rx_begin_handler = std::function<void(int interface_id, const std::vector<Bj_net_address>& addresses)>;
+using Bj_net_rx_begin_handler = std::function<void(int interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_mtu mtu)>;
 using Bj_net_rx_data_handler = std::function<void(int interface_id, std::span<unsigned char> data, Bj_net_send reply)>;
 using Bj_net_rx_end_handler = std::function<void(int interface_id)>;
 

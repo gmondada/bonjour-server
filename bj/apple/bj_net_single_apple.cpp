@@ -69,8 +69,14 @@ void Bj_net_single_apple::open()
 
     opened = true;
 
+    Bj_net_mtu mtu = {
+        .mtu = 1500,          // TODO: get dynamically from the net interface
+        .ip_header_size = 20, // TODO: this is for IPv4 only, we should put 40 for IPv6
+        .udp_header_size = 8
+    };
+
     if (rx_begin_handler)
-        rx_begin_handler(0, interface_addresses);
+        rx_begin_handler(0, interface_addresses, mtu);
 }
 
 void Bj_net_single_apple::close(std::function<void()> completion)

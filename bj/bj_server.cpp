@@ -13,7 +13,7 @@
 #include "u2_dns_dump.h"
 #include "u2_mdns.h"
 
-const size_t udp_msg_size_max = 1472;
+const size_t mdns_msg_size_max = 9000;
 
 Bj_server::Bj_server(std::string_view host_name, Bj_net& net) : host_name(host_name), net(net)
 {
@@ -32,7 +32,7 @@ void Bj_server::start()
 
     running = true;
 
-    Bj_net_rx_begin_handler f1 = std::bind(&Bj_server::rx_begin_handler, this, std::placeholders::_1, std::placeholders::_2);
+    Bj_net_rx_begin_handler f1 = std::bind(&Bj_server::rx_begin_handler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
     net.set_rx_begin_handler(f1);
 
     Bj_net_rx_data_handler f2 = std::bind(&Bj_server::rx_data_handler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
@@ -78,28 +78,32 @@ void Bj_server::register_service(std::string_view instance_name, std::string_vie
     net.executor().invoke_async([this, service]() {
         service_instances.push_back(service);
         Bj_service_collection service_collection(host_name, domain_name, service_instances);
-        for (auto& [_, interface_db] : interfaces) {
-            interface_db->set_service_collection(service_collection);
+        for (auto& [_, interface] : interfaces) {
+            interface.database->set_service_collection(service_collection);
         }
     });
 }
 
-void Bj_server::rx_begin_handler(int interface_id, const std::vector<Bj_net_address>& addresses)
+void Bj_server::rx_begin_handler(int interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_mtu mtu)
 {
-    assert(!interfaces[interface_id]);
+    assert(!interfaces.contains(interface_id));
     Bj_host host(host_name, domain_name, addresses);
     Bj_service_collection service_collection(host_name, domain_name, service_instances);
     auto interface_db = std::make_shared<Bj_net_interface_database>(host, service_collection);
-    interfaces[interface_id] = interface_db;
+    Interface interface = {
+        .database = interface_db,
+        .mtu = mtu
+    };
+    interfaces[interface_id] = interface;
     if (log_level >= 1)
         u2_dns_database_dump(interface_db->database_view(), 0);
-    send_unsolicited_announcements(*interface_db);
+    send_unsolicited_announcements(interface);
 }
 
 void Bj_server::rx_data_handler(int interface_id, std::span<unsigned char> data, Bj_net_send reply)
 {
-    auto interface_db = interfaces[interface_id];
-    assert(interface_db);
+    assert(interfaces.contains(interface_id));
+    auto interface = interfaces[interface_id];
 
     if (log_level >= 2) {
         bj_util::dump_data(data);
@@ -107,8 +111,13 @@ void Bj_server::rx_data_handler(int interface_id, std::span<unsigned char> data,
         printf("\n");
     }
 
-    unsigned char out_msg[udp_msg_size_max];
-    size_t out_size = u2_mdns_process_query(interface_db->database_view(), data.data(), data.size(), out_msg, sizeof(out_msg));
+    // size_t udp_mtu = interface.mtu.mtu - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
+    size_t msg_size_max = mdns_msg_size_max - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
+
+    // TODO: manage buffer overflow (generate multiple messages)
+    unsigned char out_msg[msg_size_max];
+    size_t out_size = u2_mdns_process_query(interface.database->database_view(), data.data(), data.size(), out_msg, msg_size_max);
+    assert(out_size <= msg_size_max);
     if (out_size)
         reply(std::span(out_msg, out_size));
 }
@@ -120,16 +129,16 @@ void Bj_server::rx_end_handler(int interface_id)
 
 void Bj_server::send_unsolicited_announcements()
 {
-    for (auto [_, interface_db] : interfaces) {
-        send_unsolicited_announcements(*interface_db);
+    for (auto& [_, interface] : interfaces) {
+        send_unsolicited_announcements(interface);
     }
 }
 
-void Bj_server::send_unsolicited_announcements(Bj_net_interface_database& interface_db)
+void Bj_server::send_unsolicited_announcements(Interface& interface)
 {
     std::vector<const u2_dns_record*> records;
 
-    auto service_domains = interface_db.get_service_collection().domains_view();
+    auto service_domains = interface.database->get_service_collection().domains_view();
     for (auto& domain : service_domains) {
         for (int i = 0; i < domain->record_count; i++) {
             const u2_dns_record *record = domain->record_list[i];
@@ -139,9 +148,12 @@ void Bj_server::send_unsolicited_announcements(Bj_net_interface_database& interf
         }
     }
 
+    // size_t udp_mtu = interface.mtu.mtu - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
+    size_t msg_size_max = mdns_msg_size_max - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
+
     if (!records.empty()) {
-        unsigned char out_msg[udp_msg_size_max];
-        size_t out_size = u2_mdns_generate_unsolicited_announcement(records.data(), (int)records.size(), false, out_msg, sizeof(out_msg));
+        unsigned char out_msg[msg_size_max];
+        size_t out_size = u2_mdns_generate_unsolicited_announcement(records.data(), (int)records.size(), false, out_msg, msg_size_max);
         if (out_size) {
             net.send(std::span(out_msg, out_size));
         }

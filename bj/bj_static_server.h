@@ -21,7 +21,9 @@ private:
     bool running = false;
     const struct u2_dns_database& database;
     Bj_net& net;
+    Bj_net_mtu mtu;
 
+    void rx_begin_handler(int interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_mtu mtu);
     void rx_data_handler(int interface_id, std::span<unsigned char> data, Bj_net_send reply);
     void send_unsolicited_announcements();
 };

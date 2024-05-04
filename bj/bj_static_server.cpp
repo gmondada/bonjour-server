@@ -5,6 +5,7 @@
 //  Copyright © 2024 Gabriele Mondada. All rights reserved.
 //
 
+#include <cassert>
 #include "bj_static_server.h"
 #include "bj_util.h"
 #include "u2_base.h"
@@ -12,7 +13,7 @@
 #include "u2_dns_dump.h"
 #include "u2_mdns.h"
 
-const size_t udp_msg_size_max = 1472;
+const size_t mdns_msg_size_max = 9000;
 
 void Bj_static_server::set_log_level(int log_level)
 {
@@ -26,8 +27,11 @@ void Bj_static_server::start()
 
     running = true;
 
-    Bj_net_rx_data_handler f = std::bind(&Bj_static_server::rx_data_handler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-    net.set_rx_data_handler(f);
+    Bj_net_rx_begin_handler f1 = std::bind(&Bj_static_server::rx_begin_handler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    net.set_rx_begin_handler(f1);
+
+    Bj_net_rx_data_handler f2 = std::bind(&Bj_static_server::rx_data_handler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    net.set_rx_data_handler(f2);
 
     net.executor().invoke_async([this]() {
         net.open();
@@ -60,6 +64,12 @@ void Bj_static_server::stop()
     running = false;
 }
 
+void Bj_static_server::rx_begin_handler(int interface_id, const std::vector<Bj_net_address>& addresses, Bj_net_mtu mtu)
+{
+    assert(this->mtu.mtu == 0);
+    this->mtu = mtu;
+}
+
 void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char> data, Bj_net_send reply)
 {
     if (log_level >= 1) {
@@ -68,8 +78,14 @@ void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char
         printf("\n");
     }
     
-    unsigned char out_msg[udp_msg_size_max];
-    size_t out_size = u2_mdns_process_query(&database, data.data(), data.size(), out_msg, sizeof(out_msg));
+    assert(mtu.mtu > 0);
+    // size_t udp_mtu = mtu.mtu - mtu.ip_header_size - mtu.udp_header_size;
+    size_t msg_size_max = mdns_msg_size_max - mtu.ip_header_size - mtu.udp_header_size;
+
+    // TODO: manage buffer overflow (generate multiple messages)
+    unsigned char out_msg[msg_size_max];
+    size_t out_size = u2_mdns_process_query(&database, data.data(), data.size(), out_msg, msg_size_max);
+    assert(out_size <= msg_size_max);
     if (out_size) {
         reply(std::span(out_msg, out_size));
     }
@@ -91,9 +107,13 @@ void Bj_static_server::send_unsolicited_announcements()
         }
     }
 
+    assert(mtu.mtu > 0);
+    // size_t udp_mtu = mtu.mtu - mtu.ip_header_size - mtu.udp_header_size;
+    size_t msg_size_max = mdns_msg_size_max - mtu.ip_header_size - mtu.udp_header_size;
+
     if (record_count) {
-        unsigned char out_msg[udp_msg_size_max];
-        size_t out_size = u2_mdns_generate_unsolicited_announcement(record_list, record_count, false, out_msg, sizeof(out_msg));
+        unsigned char out_msg[msg_size_max];
+        size_t out_size = u2_mdns_generate_unsolicited_announcement(record_list, record_count, false, out_msg, msg_size_max);
         if (out_size) {
             net.send(std::span(out_msg, out_size));
         }
