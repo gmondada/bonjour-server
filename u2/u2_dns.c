@@ -250,6 +250,8 @@ int u2_dns_name_compare(const char *name1, const char *name2)
 
 /**
  * Initialize the reader.
+ * The given message is not copied into the reader. It should be kept in memory
+ * as long as we use the reader and the extracted entries.
  * @return 0 = success, negative number = error
  */
 int u2_dns_msg_reader_init(struct u2_dns_msg_reader *reader, const void *msg, size_t size)
@@ -279,7 +281,10 @@ int u2_dns_msg_reader_init(struct u2_dns_msg_reader *reader, const void *msg, si
 
 /**
  * Extract an entry from the message.
- * This function is efficient if entries are retrieved in sequencial order.
+ * This function is very efficient as long as entries are retrieved in sequencial
+ * order.
+ * The returned entries are valid as long as the reader and the related input
+ * message are kept in memory.
  * @return 0 = success, negative number = error
  */
 int u2_dns_msg_reader_get_entry(struct u2_dns_msg_reader *reader, int index, struct u2_dns_msg_entry *entry)
