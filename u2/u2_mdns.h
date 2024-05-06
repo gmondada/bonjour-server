@@ -15,6 +15,11 @@
 U2_C_BEGIN
 
 
+/*** literals ***/
+
+#define U2_MDNS_MSG_SIZE_MAX 9000 // this includes IP and UDP headers
+
+
 /*** prototypes ***/
 
 size_t u2_mdns_process_query(const struct u2_dns_database *database, void *msg_in, size_t size_in, void *msg_out, size_t max_out);

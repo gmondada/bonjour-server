@@ -13,7 +13,7 @@
 #include "u2_dns_dump.h"
 #include "u2_mdns.h"
 
-const size_t mdns_msg_size_max = 9000;
+const size_t mdns_msg_size_max = U2_MDNS_MSG_SIZE_MAX;
 
 Bj_server::Bj_server(std::string_view host_name, Bj_net& net) : host_name(host_name), net(net)
 {
@@ -111,13 +111,17 @@ void Bj_server::rx_data_handler(int interface_id, std::span<unsigned char> data,
         printf("\n");
     }
 
-    // size_t udp_mtu = interface.mtu.mtu - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
-    size_t msg_size_max = mdns_msg_size_max - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
+    size_t msg_mtu = U2_MIN(mdns_msg_size_max, interface.mtu.mtu);
+    size_t msg_header_size = interface.mtu.ip_header_size + interface.mtu.udp_header_size;
+    assert(msg_header_size < msg_mtu);
 
-    // TODO: manage buffer overflow (generate multiple messages)
-    unsigned char out_msg[msg_size_max];
-    size_t out_size = u2_mdns_process_query(interface.database->database_view(), data.data(), data.size(), out_msg, msg_size_max);
-    assert(out_size <= msg_size_max);
+    size_t msg_ideal_size = msg_mtu - msg_header_size;
+    size_t msg_max_size = mdns_msg_size_max - msg_header_size;
+
+    // TODO: manage buffer overflow; generate multiple messages; adopt msg_ideal_size
+    unsigned char out_msg[mdns_msg_size_max];
+    size_t out_size = u2_mdns_process_query(interface.database->database_view(), data.data(), data.size(), out_msg, msg_max_size);
+    assert(out_size <= msg_max_size);
     if (out_size)
         reply(std::span(out_msg, out_size));
 }
@@ -142,20 +146,17 @@ void Bj_server::send_unsolicited_announcements(Interface& interface)
     for (auto& domain : service_domains) {
         for (int i = 0; i < domain->record_count; i++) {
             const u2_dns_record *record = domain->record_list[i];
-            if (record->type == U2_DNS_RR_TYPE_PTR) {
+            if (record->type == U2_DNS_RR_TYPE_PTR)
                 records.push_back(record);
-            }
         }
     }
 
-    // size_t udp_mtu = interface.mtu.mtu - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
     size_t msg_size_max = mdns_msg_size_max - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
 
     if (!records.empty()) {
-        unsigned char out_msg[msg_size_max];
+        unsigned char out_msg[mdns_msg_size_max];
         size_t out_size = u2_mdns_generate_unsolicited_announcement(records.data(), (int)records.size(), false, out_msg, msg_size_max);
-        if (out_size) {
+        if (out_size)
             net.send(std::span(out_msg, out_size));
-        }
     }
 }

@@ -13,7 +13,7 @@
 #include "u2_dns_dump.h"
 #include "u2_mdns.h"
 
-const size_t mdns_msg_size_max = 9000;
+const size_t mdns_msg_size_max = U2_MDNS_MSG_SIZE_MAX;
 
 void Bj_static_server::set_log_level(int log_level)
 {
@@ -79,16 +79,14 @@ void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char
     }
     
     assert(mtu.mtu > 0);
-    // size_t udp_mtu = mtu.mtu - mtu.ip_header_size - mtu.udp_header_size;
     size_t msg_size_max = mdns_msg_size_max - mtu.ip_header_size - mtu.udp_header_size;
 
-    // TODO: manage buffer overflow (generate multiple messages)
-    unsigned char out_msg[msg_size_max];
+    // TODO: manage buffer overflow; generate multiple messages
+    unsigned char out_msg[mdns_msg_size_max];
     size_t out_size = u2_mdns_process_query(&database, data.data(), data.size(), out_msg, msg_size_max);
     assert(out_size <= msg_size_max);
-    if (out_size) {
+    if (out_size)
         reply(std::span(out_msg, out_size));
-    }
 }
 
 void Bj_static_server::send_unsolicited_announcements()
@@ -108,14 +106,12 @@ void Bj_static_server::send_unsolicited_announcements()
     }
 
     assert(mtu.mtu > 0);
-    // size_t udp_mtu = mtu.mtu - mtu.ip_header_size - mtu.udp_header_size;
     size_t msg_size_max = mdns_msg_size_max - mtu.ip_header_size - mtu.udp_header_size;
 
     if (record_count) {
-        unsigned char out_msg[msg_size_max];
+        unsigned char out_msg[mdns_msg_size_max];
         size_t out_size = u2_mdns_generate_unsolicited_announcement(record_list, record_count, false, out_msg, msg_size_max);
-        if (out_size) {
+        if (out_size)
             net.send(std::span(out_msg, out_size));
-        }
     }
 }
