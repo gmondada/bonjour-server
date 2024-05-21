@@ -117,7 +117,7 @@ struct u2_dns_msg_builder {
 const char *u2_dns_msg_type_to_str(int type);
 int u2_dns_msg_name_span(const void *msg, size_t size, int pos);
 
-bool u2_dns_name_init(char *name, size_t size);
+void u2_dns_name_init(char *name, size_t size);
 int u2_dns_name_length(const void *name);
 bool u2_dns_name_append_label(char *name, size_t size, char *label);
 bool u2_dns_name_append_compressed_name(char *name, size_t size, const void *data, int pos);
@@ -263,6 +263,13 @@ static inline int u2_dns_msg_entry_get_rr_class(const struct u2_dns_msg_entry *e
 static inline int u2_dns_msg_entry_get_rr_ttl(const struct u2_dns_msg_entry *entry)
 {
     return u2_dns_msg_get_field_u32(entry->data, entry->type_pos + 4);
+}
+
+static inline size_t u2_dns_msg_builder_get_size(struct u2_dns_msg_builder *builder)
+{
+    if (builder->size <= 12)
+        return 0;
+    return builder->size;
 }
 
 

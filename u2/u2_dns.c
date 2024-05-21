@@ -5,6 +5,7 @@
 //  Copyright © 2024 Gabriele Mondada. All rights reserved.
 //
 
+#include "u2_base.h"
 #include "u2_dns.h"
 #include <stdio.h>
 #include <string.h>
@@ -160,16 +161,16 @@ int u2_dns_msg_name_span(const void *msg, size_t size, int pos)
     return end - pos;
 }
 
-bool u2_dns_name_init(char *name, size_t size)
+void u2_dns_name_init(char *name, size_t size)
 {
     if (size < 1)
-        return false;
-    *name = 0;
-    return true;
+        U2_FATAL("u2_dns: name buffer too small");
+    name[0] = 0;
 }
 
 /**
- * Return the entire name length, including the ending zero label. Name compression is not allowed.
+ * Return the entire name length, including the ending zero label.
+ * The given name must be a valid dns names, without compression.
  */
 int u2_dns_name_length(const void *name)
 {
@@ -180,7 +181,7 @@ int u2_dns_name_length(const void *name)
         if (count == 0)
             return i + 1;
         if (count >= 0xc0)
-            abort();
+            U2_FATAL("u2_dns: bad name format");
         i += 1 + count;
     }
 }
@@ -194,7 +195,7 @@ bool u2_dns_name_append_label(char *name, size_t size, char *label)
     size_t len = strlen(label);
     if (len > 63)
         return false;
-    if (pos  + len + 1 > size)
+    if (pos + len + 1 > size)
         return false;
     name[pos - 1] = (uint8_t)len;
     memcpy(name + pos, label, len);
@@ -231,12 +232,13 @@ bool u2_dns_name_append_compressed_name(char *name, size_t size, const void *dat
             if (ptr >= pos)
                 return false;
             return u2_dns_name_append_compressed_name(name, size, data, ptr);
-        } else {
-            return false;
         }
     }
 }
 
+/**
+ * Provided names must be valid dns names without compression.
+ */
 int u2_dns_name_compare(const char *name1, const char *name2)
 {
     int len1 = u2_dns_name_length(name1);
@@ -300,7 +302,7 @@ int u2_dns_msg_reader_get_entry(struct u2_dns_msg_reader *reader, int index, str
 void u2_dns_msg_builder_init(struct u2_dns_msg_builder *builder, void *data, size_t size, int id, int flags)
 {
     if (size < 12)
-        abort();
+        U2_FATAL("buffer size too small");
 
     builder->data = data;
     builder->max = (int)size;
@@ -328,11 +330,10 @@ void u2_dns_msg_builder_set_category(struct u2_dns_msg_builder *builder, enum u2
             pos = 10;
             break;
         default:
-            abort();
+            U2_FATAL("u2_dns: bad rr category %d\n", (int)category);
     }
-    if (pos < builder->counter_pos) {
-        abort();
-    }
+    if (pos < builder->counter_pos)
+        U2_FATAL("u2_dns: bad rr category order\n");
     builder->counter_pos = pos;
 }
 
