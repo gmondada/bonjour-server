@@ -18,11 +18,11 @@
 #include "u2_dns_dump.h"
 
 #define _ENUM_SERVICE "\011_services\007_dns-sd\004_udp\005local\0"
-#define _SERVICE "\005_toto\004_udp\005local\0"
-#define _SERVICE_INSTANCE "\4Toto" _SERVICE
-#define _HOST_NAME "\010TotoHost\005local\0"
+#define _SERVICE "\011_service1\004_udp\005local\0"
+#define _SERVICE_INSTANCE "\022Service Instance 1" _SERVICE
+#define _HOST_NAME "\013ServiceHost\005local\0"
 #define _HOST_PORT 1234
-#define _SERVICE_INSTANCE_TXT "\4toto\0"
+#define _SERVICE_INSTANCE_TXT "\5foo=1\0"
 
 
 static const char _enum_service[] = _ENUM_SERVICE;

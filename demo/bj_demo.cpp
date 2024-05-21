@@ -16,14 +16,14 @@ void bj_demo()
     Bj_net_group_apple net;
     net.set_log_level(1);
 
-    Bj_server server("TotoHost", net);
+    Bj_server server("ServiceHost", net);
     server.set_log_level(2);
 
-    auto txt = bj_util::dns_name("hello=123");
+    auto txt = bj_util::dns_name("foo=123");
     std::span<const char> txt_span(txt.data(), txt.size());
-    server.register_service("Toto", "_toto._udp", 1234, std::span<char>());
-    server.register_service("Toto2", "_toto._udp", 1235, std::span<char>());
-    server.register_service("Toto3", "_toto-rapid._tcp", 123, txt_span);
+    server.register_service("Service Instance 1A", "_service1._udp", 1234, std::span<char>());
+    server.register_service("Service Instance 1B", "_service1._udp", 1235, std::span<char>());
+    server.register_service("Service Instance 2", "_service2._tcp", 2345, txt_span);
 
     server.start();
 
