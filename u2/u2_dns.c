@@ -170,7 +170,7 @@ void u2_dns_name_init(char *name, size_t size)
 
 /**
  * Return the entire name length, including the ending zero label.
- * The given name must be a valid dns names, without compression.
+ * The given name must be a valid dns name, without compression.
  */
 int u2_dns_name_length(const void *name)
 {
