@@ -121,11 +121,13 @@ void Bj_server::rx_data_handler(int interface_id, std::span<unsigned char> data,
     size_t msg_ideal_size = msg_mtu - msg_header_size;
     size_t msg_max_size = mdns_msg_size_max - msg_header_size;
 
-    // TODO: manage buffer overflow; generate multiple messages; adopt msg_ideal_size
-    unsigned char out_msg[mdns_msg_size_max];
-    size_t out_size = u2_mdns_process_query(interface.database->database_view(), data.data(), data.size(), out_msg, msg_max_size);
-    assert(out_size <= msg_max_size);
-    if (out_size) {
+    struct u2_mdns_query_proc proc;
+    u2_mdsn_query_proc_init(&proc, data.data(), data.size(), interface.database->database_view());
+    for (;;) {
+        unsigned char out_msg[mdns_msg_size_max];
+        size_t out_size = u2_mdns_query_proc_run(&proc, out_msg, msg_ideal_size, msg_max_size);
+        if (out_size == 0)
+            break;
         reply(std::span(out_msg, out_size));
         if (log_level >= 1) {
             printf("### OUTPUT MSG - REPLY\n");

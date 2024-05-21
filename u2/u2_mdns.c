@@ -6,14 +6,10 @@
 //
 
 #include <stdio.h>
+#include <assert.h>
+#include <string.h>
 #include "u2_base.h"
 #include "u2_mdns.h"
-
-
-struct u2_dns_response_record {
-    enum u2_dns_rr_category category;
-    const struct u2_dns_record *record;
-};
 
 
 static bool _add_answer(struct u2_dns_msg_builder *builder, const struct u2_dns_record *record, bool tear_down)
@@ -38,7 +34,7 @@ static bool _add_answer(struct u2_dns_msg_builder *builder, const struct u2_dns_
                     if (record_it->type < 8 * sizeof(u2_dns_type_mask_t))
                         type_mask |= (u2_dns_type_mask_t)1 << record_it->type;
                     else
-                        printf("warning: unsupported record type %d in NSEC\n", record->type);
+                        U2_FATAL("unsupported record type %d in NSEC\n", record->type);
                 }
             }
             return u2_dns_msg_builder_add_rr_single_domain_nsec(builder, record->domain->name, record->cache_flush, ttl, type_mask);
@@ -59,105 +55,137 @@ static inline const struct u2_dns_response_record *_find_record(const struct u2_
 }
 
 /**
- * This function processes all questions and add the corresponding answers in the given list, starting at the given index.
- * It then returns the total number of records present in the list. If the list is too short to store all aswers, the returned
- * value is an estimation of the total number of records we would have if `record_max` was infinite. This estimation
- * is never below the real number and can be used to allocate a buffer able to contains all records.
+ * This function decodes the message and fill the `proc->record_list` array.
  */
-static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_database *database, struct u2_dns_response_record *record_list, int record_count, int record_max)
+static void _decode_questions(struct u2_mdns_query_proc *proc)
 {
-    struct u2_dns_msg_reader reader;
-    int rv = u2_dns_msg_reader_init(&reader, msg_in, size_in);
-    if (rv < 0)
-        return 0;
+    assert(!proc->decoding_error);
 
-    int flags = u2_dns_msg_reader_get_flags(&reader);
-    if (flags & U2_DNS_MSG_FLAG_QR)
-        return 0;
+    const int record_max = U2_ARRAY_LEN(proc->record_list);
+    proc->answer_record_count = 0;
+    proc->additional_record_count = 0;
+    proc->record_index = 0;
 
-    struct u2_dns_msg_entry entries[32];
-    int entry_count = u2_dns_msg_reader_get_entry_count(&reader);
-    if (entry_count > U2_ARRAY_LEN(entries))
-        entry_count = U2_ARRAY_LEN(entries);
-    for (int i = 0; i < entry_count; i++) {
-        rv = u2_dns_msg_reader_get_entry(&reader, i, entries + i);
-        if (rv < 0)
-            return 0;
-    }
+    for (;;) {
+        if (proc->question_index >= proc->question_count)
+            break;
 
-    int qcount = u2_dns_msg_reader_get_question_count(&reader);
-    if (qcount > entry_count)
-        qcount = entry_count; // TODO: should we generate a single message with the truncated flag or several messages?
+        if (proc->answer_record_count >= record_max)
+            break;
 
-    for (int q = 0; q < qcount; q++) {
-        const struct u2_dns_msg_entry *entry = entries + q;
+        struct u2_dns_msg_entry entry;
+        int rv = u2_dns_msg_reader_get_entry(&proc->reader, proc->question_index, &entry);
+        if (rv < 0) {
+            proc->decoding_error = rv;
+            break;
+        }
 
-        int type = u2_dns_msg_entry_get_question_type(entry);
-        int klass = u2_dns_msg_entry_get_question_class(entry);
-        if (klass != 1 && klass != 255)
+        int type = u2_dns_msg_entry_get_question_type(&entry);
+        int klass = u2_dns_msg_entry_get_question_class(&entry);
+        if (klass != 1 && klass != 255) {
+            proc->question_index++;
             continue;
+        }
 
         char name[256];
         u2_dns_name_init(name, 256);
-        u2_dns_name_append_compressed_name(name, 256, msg_in, entry->name_pos);
+        bool valid_name = u2_dns_name_append_compressed_name(name, 256, entry.data, entry.name_pos);
+        if (!valid_name) {
+            proc->decoding_error = -1;
+            break;
+        }
 
-        for (int d = 0; d < database->domain_count; d++) {
-            const struct u2_dns_domain *domain = database->domain_list[d];
+        bool overflow = false;
+        int first_record = proc->answer_record_count;
+        for (int d = 0; d < proc->database->domain_count; d++) {
+            const struct u2_dns_domain *domain = proc->database->domain_list[d];
             if (!u2_dns_name_compare(domain->name, name)) {
                 bool found = false;
                 const struct u2_dns_record *nsec_record = NULL;
                 for (int r = 0; r < domain->record_count; r++) {
                     const struct u2_dns_record *record = domain->record_list[r];
                     if (record->type == type) {
-                        if (record_count < record_max) {
-                            record_list[record_count].category = U2_DNS_RR_CATEGORY_ANSWER;
-                            record_list[record_count].record = record;
-                        }
-                        record_count++;
                         found = true;
+                        if (proc->answer_record_count >= record_max) {
+                            overflow = true;
+                            break;
+                        }
+                        proc->record_list[proc->answer_record_count].category = U2_DNS_RR_CATEGORY_ANSWER;
+                        proc->record_list[proc->answer_record_count].record = record;
+                        proc->answer_record_count++;
                     } else if (record->type == U2_DNS_RR_TYPE_NSEC) {
                         nsec_record = record;
                     }
                 }
-                if (!found && nsec_record) {
+                if (!found && nsec_record && !overflow) {
                     /*
-                     * Here we avoid redundant answers. We can do that only
-                     * for answers stored in the list. When the list is full
-                     * record_count could be overestimated.
+                     * Here we avoid redundant nsec answers. We can do that only
+                     * for answers stored in the list.
                      */
-                    if (!_find_record(record_list, U2_MIN(record_count, record_max), nsec_record)) {
-                        if (record_count < record_max) {
-                            record_list[record_count].category = U2_DNS_RR_CATEGORY_ANSWER;
-                            record_list[record_count].record = nsec_record;
+                    if (!_find_record(proc->record_list, proc->answer_record_count, nsec_record)) {
+                        if (proc->answer_record_count >= record_max) {
+                            overflow = true;
+                            break;
                         }
-                        record_count++;
+                        proc->record_list[proc->answer_record_count].category = U2_DNS_RR_CATEGORY_ANSWER;
+                        proc->record_list[proc->answer_record_count].record = nsec_record;
+                        proc->answer_record_count++;
                     }
                 }
             }
         }
+
+        if (overflow) {
+            // we cannot store all records corresponding to this question
+            if (first_record == 0) {
+                /*
+                 * This question has so many records that they do not fit in the record list.
+                 * We ingore it, considering it as answered, otherwise it will be decoded again
+                 * and again, with the same result, running in loop forever.
+                 */
+                proc->answer_record_count = 0;
+            } else {
+                /*
+                 * This answer cannot be answered entierly. We consider it as not answered.
+                 * In this way it will be decoded again later, hoping there will be more space
+                 * available in the record list.
+                 */
+                proc->answer_record_count = first_record;
+                break;
+            }
+        }
+
+        proc->question_index++;
     }
+}
 
-    // remove known answers
+/**
+ * Removes answers that are set as already known in the request.
+ * Silently ignore all decoding errors.
+ */
+static void _invalidate_known_answers(struct u2_mdns_query_proc *proc)
+{
+    if (proc->decoding_error)
+        return;
 
-    if (!record_count)
-        return 0;
+    int qcount = u2_dns_msg_reader_get_question_count(&proc->reader);
+    int acount = u2_dns_msg_reader_get_answer_rr_count(&proc->reader);
 
-    int acount = u2_dns_msg_reader_get_answer_rr_count(&reader);
-    if (acount > entry_count - qcount)
-        acount = entry_count - qcount;
+    for (int a = 0; a < acount; a++) {
+        struct u2_dns_msg_entry entry;
+        int rv = u2_dns_msg_reader_get_entry(&proc->reader, qcount + a, &entry);
+        if (rv < 0)
+            return;
 
-    for (int a = qcount; a < qcount + acount; a++) {
-        const struct u2_dns_msg_entry *entry = entries + a;
-
-        int klass = u2_dns_msg_entry_get_rr_class(entry);
+        int klass = u2_dns_msg_entry_get_rr_class(&entry);
         if (klass != 1 && klass != 255)
             continue;
 
-        int type = u2_dns_msg_entry_get_rr_type(entry);
+        int type = u2_dns_msg_entry_get_rr_type(&entry);
         switch (type) {
             case U2_DNS_RR_TYPE_PTR: {
-                int span = u2_dns_msg_name_span(msg_in, size_in, entry->rdata_pos);
-                if (span != entry->rdata_len)
+                int span = u2_dns_msg_name_span(entry.data, entry.rdata_pos + entry.rdata_len, entry.rdata_pos);
+                if (span != entry.rdata_len)
                     continue;
                 break;
             }
@@ -166,17 +194,19 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
                 continue;
         }
 
-        int ttl = u2_dns_msg_entry_get_rr_ttl(entry);
+        int ttl = u2_dns_msg_entry_get_rr_ttl(&entry);
 
         char name[256];
         u2_dns_name_init(name, 256);
-        u2_dns_name_append_compressed_name(name, 256, msg_in, entry->name_pos);
+        bool valid_name = u2_dns_name_append_compressed_name(name, 256, entry.data, entry.name_pos);
+        if (!valid_name)
+            return;
 
-        char buf[256];
-        bool buf_in_use = false;
+        char ptr_name[256];
+        bool ptr_name_defined = false;
 
-        for (int r = 0; r < record_count; r++) {
-            struct u2_dns_response_record *record = record_list + r;
+        for (int r = 0; r < proc->answer_record_count; r++) {
+            struct u2_dns_response_record *record = proc->record_list + r;
             if (record->category != U2_DNS_RR_CATEGORY_ANSWER)
                 continue;
             if (record->record->type != type)
@@ -185,12 +215,14 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
                 continue;
             switch (type) {
                 case U2_DNS_RR_TYPE_PTR: {
-                    if (!buf_in_use) {
-                        u2_dns_name_init(buf, sizeof(buf));
-                        u2_dns_name_append_compressed_name(buf, sizeof(buf), msg_in, entry->rdata_pos);
-                        buf_in_use = true;
+                    if (!ptr_name_defined) {
+                        u2_dns_name_init(ptr_name, sizeof(ptr_name));
+                        bool valid_name = u2_dns_name_append_compressed_name(ptr_name, sizeof(ptr_name), entry.data, entry.rdata_pos);
+                        if (!valid_name)
+                            return;
+                        ptr_name_defined = true;
                     }
-                    if (u2_dns_name_compare(buf, record->record->ptr.name))
+                    if (u2_dns_name_compare(ptr_name, record->record->ptr.name))
                         continue;
                     break;
                 }
@@ -201,17 +233,25 @@ static int _decode_questions(void *msg_in, size_t size_in, const struct u2_dns_d
             break;
         }
     }
-
-    // remove invalidated answers
-    // TODO
-
-    return record_count;
 }
 
-static int _generate_additional_response_records(const struct u2_dns_database *database, struct u2_dns_response_record *record_list, int record_count, int record_max)
+/**
+ * Fill the remaining slots in the `proc->record_list` array with non requested answers.
+ * Silently ignore all decoding errors.
+ */
+static void _generate_additional_response_records(struct u2_mdns_query_proc *proc)
 {
-    for (int i = 0; i < record_count; i++) {
-        struct u2_dns_response_record *rr = &record_list[i];
+    if (proc->decoding_error)
+        return;
+
+    const int record_max = U2_ARRAY_LEN(proc->record_list);
+    int record_index = proc->answer_record_count;
+
+    for (int a = 0; a < proc->answer_record_count; a++) {
+        if (record_index >= record_max)
+            break;
+
+        struct u2_dns_response_record *rr = proc->record_list + a;
 
         if (rr->category != U2_DNS_RR_CATEGORY_ANSWER && rr->category != U2_DNS_RR_CATEGORY_ADDITIONAL)
             continue;
@@ -231,69 +271,148 @@ static int _generate_additional_response_records(const struct u2_dns_database *d
         if (!name)
             continue;
 
-        for (int d = 0; d < database->domain_count; d++) {
-            const struct u2_dns_domain *domain = database->domain_list[d];
+        for (int d = 0; d < proc->database->domain_count; d++) {
+            if (record_index >= record_max)
+                break;
+            const struct u2_dns_domain *domain = proc->database->domain_list[d];
             if (domain->name == name) {
                 for (int r = 0; r < domain->record_count; r++) {
+                    if (record_index >= record_max)
+                        break;
                     const struct u2_dns_record *record = domain->record_list[r];
                     /*
                      * Here we avoid redundant answers. We can do that only
-                     * for answers stored in the list. When the list is full
-                     * record_count could be overestimated.
+                     * for answers stored in the list.
                      */
-                    if (!_find_record(record_list, U2_MIN(record_count, record_max), record)) {
-                        if (record_count < record_max) {
-                            record_list[record_count].category = U2_DNS_RR_CATEGORY_ADDITIONAL;
-                            record_list[record_count].record = record;
-                        }
-                        record_count++;
+                    if (!_find_record(proc->record_list, record_index, record)) {
+                        proc->record_list[record_index].category = U2_DNS_RR_CATEGORY_ADDITIONAL;
+                        proc->record_list[record_index].record = record;
+                        record_index++;
                     }
                 }
             }
         }
     }
-    return record_count;
+
+    proc->additional_record_count = record_index - proc->answer_record_count;
 }
 
-static size_t _emit_response(void *out_msg, size_t out_msg_max, struct u2_dns_response_record *record_list, int record_count)
+static size_t _emit_response(struct u2_mdns_query_proc *proc, void *out_msg, size_t ideal_size, size_t max_size)
 {
-    struct u2_dns_msg_builder builder;
-    u2_dns_msg_builder_init(&builder, out_msg, out_msg_max, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
+    if (ideal_size > max_size)
+        U2_FATAL("u2_mdsn: inconsistent output message size");
 
-    for (int i = 0; i < record_count; i++) {
-        struct u2_dns_response_record *rr = &record_list[i];
+    if (proc->record_index >= proc->answer_record_count)
+        return 0;
+
+    struct u2_dns_msg_builder builder;
+    u2_dns_msg_builder_init(&builder, out_msg, ideal_size, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
+
+    // emit mandatory records (answers)
+
+    int first_record_index = proc->record_index;
+
+    for (;;) {
+        if (proc->record_index >= proc->answer_record_count)
+            break;
+        struct u2_dns_response_record *rr = proc->record_list + proc->record_index;
+        assert(rr->category != U2_DNS_RR_CATEGORY_ADDITIONAL);
         if (rr->category == U2_DNS_RR_CATEGORY_ANSWER) {
-            _add_answer(&builder, rr->record, false);
+            bool added = _add_answer(&builder, rr->record, false);
+            if (!added) {
+                // output msg is full
+                if (proc->record_index == first_record_index) {
+                    /*
+                     * This record alone does not fit into an ideal message.
+                     * Let's try to use the biggest allowed message.
+                     */
+                    struct u2_dns_msg_builder builder;
+                    u2_dns_msg_builder_init(&builder, out_msg, max_size, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
+                    bool added = _add_answer(&builder, rr->record, false);
+                    if (added) {
+                        proc->record_index++;
+                        return u2_dns_msg_builder_get_size(&builder);
+                    }
+                    // record really too big - ignore it
+                } else {
+                    // let keep the message as it is, remaining records will be sent later
+                    return u2_dns_msg_builder_get_size(&builder);
+                }
+            }
         }
+        proc->record_index++;
     }
 
+    // emit optinal records (additionals)
+
+    assert(proc->record_index >= proc->answer_record_count);
     u2_dns_msg_builder_set_category(&builder, U2_DNS_RR_CATEGORY_ADDITIONAL);
 
-    for (int i = 0; i < record_count; i++) {
-        struct u2_dns_response_record *rr = &record_list[i];
-        if (rr->category == U2_DNS_RR_CATEGORY_ADDITIONAL) {
-            _add_answer(&builder, rr->record, false);
-        }
+    for (;;) {
+        if (proc->record_index >= proc->answer_record_count + proc->additional_record_count)
+            break;
+        struct u2_dns_response_record *rr = proc->record_list + proc->record_index;
+        assert(rr->category == U2_DNS_RR_CATEGORY_ADDITIONAL);
+        bool added = _add_answer(&builder, rr->record, false);
+        if (!added)
+            break;
+        proc->record_index++;
     }
 
-    int size_out = builder.size;
-    if (size_out <= 12)
-        return 0;
-    return size_out;
+    return u2_dns_msg_builder_get_size(&builder);
 }
 
-size_t u2_mdns_process_query(const struct u2_dns_database *database, void *msg_in, size_t size_in, void *msg_out, size_t max_out)
+void u2_mdsn_query_proc_init(struct u2_mdns_query_proc *proc, const void *msg, size_t size, const struct u2_dns_database *database)
 {
+    memset(proc, 0, sizeof(*proc));
 
-    struct u2_dns_response_record response_record_list[32];
-    int response_record_count = _decode_questions(msg_in, size_in, database, response_record_list, 0, U2_ARRAY_LEN(response_record_list));
+    proc->database = database;
 
-    response_record_count = _generate_additional_response_records(database, response_record_list, response_record_count, U2_ARRAY_LEN(response_record_list));
+    int rv = u2_dns_msg_reader_init(&proc->reader, msg, size);
+    if (rv < 0) {
+        proc->decoding_error = rv;
+        return;
+    }
 
-    if (response_record_count > U2_ARRAY_LEN(response_record_list))
-        response_record_count = U2_ARRAY_LEN(response_record_list);
+    int flags = u2_dns_msg_reader_get_flags(&proc->reader);
+    if (flags & U2_DNS_MSG_FLAG_QR) {
+        proc->question_count = 0;
+    } else {
+        proc->question_count = u2_dns_msg_reader_get_question_count(&proc->reader);
+    }
+}
 
-    return _emit_response(msg_out, max_out, response_record_list, response_record_count);
+/**
+ * Generate an answer message and return the real size of the message.
+ * It can happen that there are several answer messages to be generated. The
+ * caller has to repeat the call to this function until 0 is returned.
+ * This function tries to generate messages up to the `ideal_size`.
+ * If a single record is so big that `ideal_size` is not enough, the message is
+ * extended up to `max_size`. If this is still not enough, the record is discarded.
+ * Ideally, `ideal_size` should correspond to the MTU, or eventually to the
+ * preferred DNS message size (512). `max_size` must be equal or bigger than
+ * `ideal_size`. It should correspond to the maximum size of a mDNS
+ * message which, including IP and UDP headers, is 9000 bytes.
+ */
+size_t u2_mdns_query_proc_run(struct u2_mdns_query_proc *proc, void *out_msg, size_t ideal_size, size_t max_size)
+{
+    for (;;) {
+        bool pending_questions = !proc->decoding_error && (proc->question_index < proc->question_count);
+        bool pending_records = proc->record_index < proc->answer_record_count;
+
+        if (pending_records) {
+            size_t out_size = _emit_response(proc, out_msg, ideal_size, max_size);
+            if (out_size)
+                return out_size;
+            assert(proc->record_index >= proc->answer_record_count);
+        } else if (pending_questions) {
+            _decode_questions(proc);
+            _invalidate_known_answers(proc);
+            _generate_additional_response_records(proc);
+        } else {
+            return 0;
+        }
+    }
 }
 
 size_t u2_mdns_generate_unsolicited_announcement(const struct u2_dns_record **record_list, int record_count, bool tear_down, void *msg_out, size_t max_out)
@@ -306,8 +425,5 @@ size_t u2_mdns_generate_unsolicited_announcement(const struct u2_dns_record **re
         _add_answer(&builder, r, tear_down);
     }
 
-    int size_out = builder.size;
-    if (size_out <= 12)
-        return 0;
-    return size_out;
+    return u2_dns_msg_builder_get_size(&builder);
 }

@@ -80,13 +80,20 @@ void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char
     }
 
     assert(mtu.mtu > 0);
-    size_t msg_size_max = mdns_msg_size_max - mtu.ip_header_size - mtu.udp_header_size;
+    size_t msg_mtu = U2_MIN(mdns_msg_size_max, mtu.mtu);
+    size_t msg_header_size = mtu.ip_header_size + mtu.udp_header_size;
+    assert(msg_header_size < msg_mtu);
 
-    // TODO: manage buffer overflow; generate multiple messages
-    unsigned char out_msg[mdns_msg_size_max];
-    size_t out_size = u2_mdns_process_query(&database, data.data(), data.size(), out_msg, msg_size_max);
-    assert(out_size <= msg_size_max);
-    if (out_size) {
+    size_t msg_ideal_size = msg_mtu - msg_header_size;
+    size_t msg_max_size = mdns_msg_size_max - msg_header_size;
+
+    struct u2_mdns_query_proc proc;
+    u2_mdsn_query_proc_init(&proc, data.data(), data.size(), &database);
+    for (;;) {
+        unsigned char out_msg[mdns_msg_size_max];
+        size_t out_size = u2_mdns_query_proc_run(&proc, out_msg, msg_ideal_size, msg_max_size);
+        if (out_size == 0)
+            break;
         reply(std::span(out_msg, out_size));
         if (log_level >= 1) {
             printf("### OUTPUT MSG - REPLY\n");
