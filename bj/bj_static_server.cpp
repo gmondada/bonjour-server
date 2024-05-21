@@ -73,11 +73,12 @@ void Bj_static_server::rx_begin_handler(int interface_id, const std::vector<Bj_n
 void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char> data, Bj_net_send reply)
 {
     if (log_level >= 1) {
-        bj_util::dump_data(data);
+        printf("### INPUT MSG\n");
+        u2_dns_data_dump(data.data(), data.size(), 2);
         u2_dns_msg_dump(data.data(), data.size(), 1);
         printf("\n");
     }
-    
+
     assert(mtu.mtu > 0);
     size_t msg_size_max = mdns_msg_size_max - mtu.ip_header_size - mtu.udp_header_size;
 
@@ -85,8 +86,15 @@ void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char
     unsigned char out_msg[mdns_msg_size_max];
     size_t out_size = u2_mdns_process_query(&database, data.data(), data.size(), out_msg, msg_size_max);
     assert(out_size <= msg_size_max);
-    if (out_size)
+    if (out_size) {
         reply(std::span(out_msg, out_size));
+        if (log_level >= 1) {
+            printf("### OUTPUT MSG - REPLY\n");
+            u2_dns_data_dump(out_msg, out_size, 2);
+            u2_dns_msg_dump(out_msg, out_size, 1);
+            printf("\n");
+        }
+    }
 }
 
 void Bj_static_server::send_unsolicited_announcements()
@@ -111,7 +119,14 @@ void Bj_static_server::send_unsolicited_announcements()
     if (record_count) {
         unsigned char out_msg[mdns_msg_size_max];
         size_t out_size = u2_mdns_generate_unsolicited_announcement(record_list, record_count, false, out_msg, msg_size_max);
-        if (out_size)
+        if (out_size) {
             net.send(std::span(out_msg, out_size));
+            if (log_level >= 1) {
+                printf("### OUTPUT MSG - UNSOLICITED\n");
+                u2_dns_data_dump(out_msg, out_size, 2);
+                u2_dns_msg_dump(out_msg, out_size, 1);
+                printf("\n");
+            }
+        }
     }
 }
