@@ -85,7 +85,7 @@ void Bj_service_instance::build_view()
 
     service_instance_records.clear();
     service_instance_records.push_back(srv);
-    service_instance_records.push_back(txt); // TODO: should be added even when empty?
+    service_instance_records.push_back(txt); // macOS dns-sd command advertises a TXT record even when empty
     service_instance_records.push_back(nsec);
 
     service_instance_record_ptrs.clear();
