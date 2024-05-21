@@ -19,6 +19,34 @@ static const char *_prefix(int indent)
     return buf + len - n;
 }
 
+void u2_dns_data_dump(const void *data, size_t size, int indent)
+{
+    const unsigned char *buf = data;
+    for (int y = 0; y < (size + 15) / 16; y++) {
+        printf("%s", _prefix(indent));
+        for (int x = 0; x < 16; x++) {
+            int off = x + y * 16;
+            if (off < size)
+                printf("%02x ", buf[off] & 0xff);
+            else
+                printf("   ");
+            if (x == 7)
+                printf(" ");
+        }
+        for (int x = 0; x < 16; x++) {
+            int off = x + y * 16;
+            if (off < size) {
+                unsigned char c = buf[off];
+                if (c < 32 || c >= 128)
+                    c = '.';
+                printf("%c", c);
+            } else
+                printf(" ");
+        }
+        printf("\n");
+    }
+}
+
 /**
  * Data should be validated by u2_dns_msg_decompose() or u2_dns_msg_name_span() before invoking this function.
  */

@@ -12,7 +12,7 @@
 namespace bj_util
 {
 
-void dump_data(std::span<unsigned char> data);
+void dump_data(std::span<unsigned char> data, int indent = 0);
 std::string dns_name(std::string_view name);
 
 }
