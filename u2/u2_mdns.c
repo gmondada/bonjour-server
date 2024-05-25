@@ -44,10 +44,10 @@ static bool _add_answer(struct u2_dns_msg_builder *builder, const struct u2_dns_
     }
 }
 
-static inline const struct u2_dns_response_record *_find_record(const struct u2_dns_response_record *record_list, int record_count, const struct u2_dns_record *record)
+static inline const struct u2_mdns_response_record *_find_record(const struct u2_mdns_response_record *record_list, int record_count, const struct u2_dns_record *record)
 {
     for (int i = 0; i < record_count; i++) {
-        const struct u2_dns_response_record *rr = &record_list[i];
+        const struct u2_mdns_response_record *rr = &record_list[i];
         if (rr->record == record)
             return rr;
     }
@@ -64,7 +64,6 @@ static void _decode_questions(struct u2_mdns_query_proc *proc)
     const int record_max = U2_ARRAY_LEN(proc->record_list);
     proc->answer_record_count = 0;
     proc->additional_record_count = 0;
-    proc->record_index = 0;
 
     for (;;) {
         if (proc->question_index >= proc->question_count)
@@ -163,7 +162,7 @@ static void _decode_questions(struct u2_mdns_query_proc *proc)
  * Removes answers that are set as already known in the request.
  * Silently ignore all decoding errors.
  */
-static void _invalidate_known_answers(struct u2_mdns_query_proc *proc)
+static void _remove_known_answers(struct u2_mdns_query_proc *proc)
 {
     if (proc->decoding_error)
         return;
@@ -206,7 +205,7 @@ static void _invalidate_known_answers(struct u2_mdns_query_proc *proc)
         bool ptr_name_defined = false;
 
         for (int r = 0; r < proc->answer_record_count; r++) {
-            struct u2_dns_response_record *record = proc->record_list + r;
+            struct u2_mdns_response_record *record = proc->record_list + r;
             if (record->category != U2_DNS_RR_CATEGORY_ANSWER)
                 continue;
             if (record->record->type != type)
@@ -233,6 +232,20 @@ static void _invalidate_known_answers(struct u2_mdns_query_proc *proc)
             break;
         }
     }
+
+    // remove invalidated answers
+
+    int compact_r = 0;
+    for (int r = 0; r < proc->answer_record_count; r++) {
+        struct u2_mdns_response_record *record = proc->record_list + r;
+        if (record->category != U2_DNS_RR_CATEGORY_NONE) {
+            if (compact_r != r)
+                proc->record_list[compact_r] = proc->record_list[r];
+            compact_r++;
+        }
+    }
+    proc->answer_record_count = compact_r;
+    assert(!proc->additional_record_count);
 }
 
 /**
@@ -251,7 +264,7 @@ static void _generate_additional_response_records(struct u2_mdns_query_proc *pro
         if (record_index >= record_max)
             break;
 
-        struct u2_dns_response_record *rr = proc->record_list + a;
+        struct u2_mdns_response_record *rr = proc->record_list + a;
 
         if (rr->category != U2_DNS_RR_CATEGORY_ANSWER && rr->category != U2_DNS_RR_CATEGORY_ADDITIONAL)
             continue;
@@ -297,71 +310,6 @@ static void _generate_additional_response_records(struct u2_mdns_query_proc *pro
     proc->additional_record_count = record_index - proc->answer_record_count;
 }
 
-static size_t _emit_response(struct u2_mdns_query_proc *proc, void *out_msg, size_t ideal_size, size_t max_size)
-{
-    if (ideal_size > max_size)
-        U2_FATAL("u2_mdsn: inconsistent output message size");
-
-    if (proc->record_index >= proc->answer_record_count)
-        return 0;
-
-    struct u2_dns_msg_builder builder;
-    u2_dns_msg_builder_init(&builder, out_msg, ideal_size, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
-
-    // emit mandatory records (answers)
-
-    int first_record_index = proc->record_index;
-
-    for (;;) {
-        if (proc->record_index >= proc->answer_record_count)
-            break;
-        struct u2_dns_response_record *rr = proc->record_list + proc->record_index;
-        assert(rr->category != U2_DNS_RR_CATEGORY_ADDITIONAL);
-        if (rr->category == U2_DNS_RR_CATEGORY_ANSWER) {
-            bool added = _add_answer(&builder, rr->record, false);
-            if (!added) {
-                // output msg is full
-                if (proc->record_index == first_record_index) {
-                    /*
-                     * This record alone does not fit into an ideal message.
-                     * Let's try to use the biggest allowed message.
-                     */
-                    struct u2_dns_msg_builder builder;
-                    u2_dns_msg_builder_init(&builder, out_msg, max_size, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
-                    bool added = _add_answer(&builder, rr->record, false);
-                    if (added) {
-                        proc->record_index++;
-                        return u2_dns_msg_builder_get_size(&builder);
-                    }
-                    // record really too big - ignore it
-                } else {
-                    // let keep the message as it is, remaining records will be sent later
-                    return u2_dns_msg_builder_get_size(&builder);
-                }
-            }
-        }
-        proc->record_index++;
-    }
-
-    // emit optinal records (additionals)
-
-    assert(proc->record_index >= proc->answer_record_count);
-    u2_dns_msg_builder_set_category(&builder, U2_DNS_RR_CATEGORY_ADDITIONAL);
-
-    for (;;) {
-        if (proc->record_index >= proc->answer_record_count + proc->additional_record_count)
-            break;
-        struct u2_dns_response_record *rr = proc->record_list + proc->record_index;
-        assert(rr->category == U2_DNS_RR_CATEGORY_ADDITIONAL);
-        bool added = _add_answer(&builder, rr->record, false);
-        if (!added)
-            break;
-        proc->record_index++;
-    }
-
-    return u2_dns_msg_builder_get_size(&builder);
-}
-
 void u2_mdsn_query_proc_init(struct u2_mdns_query_proc *proc, const void *msg, size_t size, const struct u2_dns_database *database)
 {
     memset(proc, 0, sizeof(*proc));
@@ -398,31 +346,97 @@ size_t u2_mdns_query_proc_run(struct u2_mdns_query_proc *proc, void *out_msg, si
 {
     for (;;) {
         bool pending_questions = !proc->decoding_error && (proc->question_index < proc->question_count);
-        bool pending_records = proc->record_index < proc->answer_record_count;
+        bool pending_records = proc->emitter.record_index < proc->answer_record_count;
 
         if (pending_records) {
-            size_t out_size = _emit_response(proc, out_msg, ideal_size, max_size);
+            size_t out_size = u2_mdns_emitter_run(&proc->emitter, out_msg, ideal_size, max_size);
             if (out_size)
                 return out_size;
-            assert(proc->record_index >= proc->answer_record_count);
+            assert(proc->emitter.record_index >= proc->answer_record_count);
         } else if (pending_questions) {
             _decode_questions(proc);
-            _invalidate_known_answers(proc);
+            _remove_known_answers(proc);
             _generate_additional_response_records(proc);
+            u2_mdns_emitter_init(&proc->emitter, proc->record_list, proc->answer_record_count, proc->additional_record_count, false);
         } else {
             return 0;
         }
     }
 }
 
-size_t u2_mdns_generate_unsolicited_announcement(const struct u2_dns_record **record_list, int record_count, bool tear_down, void *msg_out, size_t max_out)
+void u2_mdns_emitter_init(struct u2_mdns_emitter *emitter, const struct u2_mdns_response_record *record_list, int mandatory_record_count, int optional_record_count, bool tear_down)
 {
-    struct u2_dns_msg_builder builder;
-    u2_dns_msg_builder_init(&builder, msg_out, max_out, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
+    emitter->record_list = record_list;
+    emitter->mandatory_record_count = mandatory_record_count;
+    emitter->optional_record_count = optional_record_count;
+    emitter->record_index = 0;
+    emitter->tear_down = tear_down;
+}
 
-    for (int i = 0; i < record_count; i++) {
-        const struct u2_dns_record *r = record_list[i];
-        _add_answer(&builder, r, tear_down);
+size_t u2_mdns_emitter_run(struct u2_mdns_emitter *emitter, void *out_msg, size_t ideal_size, size_t max_size)
+{
+    if (ideal_size > max_size)
+        U2_FATAL("u2_mdsn: inconsistent output message size");
+
+    if (emitter->record_index >= emitter->mandatory_record_count)
+        return 0;
+
+    struct u2_dns_msg_builder builder;
+    u2_dns_msg_builder_init(&builder, out_msg, ideal_size, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
+    enum u2_dns_rr_category category = U2_DNS_RR_CATEGORY_NONE;
+
+    // emit mandatory records
+
+    int first_record_index = emitter->record_index;
+
+    for (;;) {
+        if (emitter->record_index >= emitter->mandatory_record_count)
+            break;
+        const struct u2_mdns_response_record *rr = emitter->record_list + emitter->record_index;
+        if (category != rr->category) {
+            category = rr->category;
+            u2_dns_msg_builder_set_category(&builder, rr->category);
+        }
+        bool added = _add_answer(&builder, rr->record, emitter->tear_down);
+        if (!added) {
+            // output msg is full
+            if (emitter->record_index == first_record_index) {
+                /*
+                 * This record alone does not fit into an ideal message.
+                 * Let's try to use the biggest allowed message.
+                 */
+                struct u2_dns_msg_builder builder;
+                u2_dns_msg_builder_init(&builder, out_msg, max_size, 0, U2_DNS_MSG_FLAG_QR | U2_DNS_MSG_FLAG_AA);
+                bool added = _add_answer(&builder, rr->record, emitter->tear_down);
+                if (added) {
+                    emitter->record_index++;
+                    return u2_dns_msg_builder_get_size(&builder);
+                }
+                // record really too big - ignore it
+            } else {
+                // let keep the message as it is, remaining records will be sent later
+                return u2_dns_msg_builder_get_size(&builder);
+            }
+        }
+        emitter->record_index++;
+    }
+
+    // emit optinal records
+
+    assert(emitter->record_index >= emitter->mandatory_record_count);
+
+    for (;;) {
+        if (emitter->record_index >= emitter->mandatory_record_count + emitter->optional_record_count)
+            break;
+        const struct u2_mdns_response_record *rr = emitter->record_list + emitter->record_index;
+        if (category != rr->category) {
+            category = rr->category;
+            u2_dns_msg_builder_set_category(&builder, rr->category);
+        }
+        bool added = _add_answer(&builder, rr->record, emitter->tear_down);
+        if (!added)
+            break;
+        emitter->record_index++;
     }
 
     return u2_dns_msg_builder_get_size(&builder);

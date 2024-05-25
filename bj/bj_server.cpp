@@ -152,23 +152,37 @@ void Bj_server::send_unsolicited_announcements()
 
 void Bj_server::send_unsolicited_announcements(Interface& interface)
 {
-    std::vector<const u2_dns_record*> records;
+    std::vector<u2_mdns_response_record> records;
 
     auto service_domains = interface.database->get_service_collection().domains_view();
     for (auto& domain : service_domains) {
         for (int i = 0; i < domain->record_count; i++) {
             const u2_dns_record *record = domain->record_list[i];
-            if (record->type == U2_DNS_RR_TYPE_PTR)
-                records.push_back(record);
+            if (record->type == U2_DNS_RR_TYPE_PTR) {
+                struct u2_mdns_response_record r = {
+                    .category = U2_DNS_RR_CATEGORY_ANSWER,
+                    .record = record,
+                };
+                records.push_back(r);
+            }
         }
     }
 
-    size_t msg_size_max = mdns_msg_size_max - interface.mtu.ip_header_size - interface.mtu.udp_header_size;
+    size_t msg_mtu = U2_MIN(mdns_msg_size_max, interface.mtu.mtu);
+    size_t msg_header_size = interface.mtu.ip_header_size + interface.mtu.udp_header_size;
+    assert(msg_header_size < msg_mtu);
+
+    size_t msg_ideal_size = msg_mtu - msg_header_size;
+    size_t msg_max_size = mdns_msg_size_max - msg_header_size;
 
     if (!records.empty()) {
+        struct u2_mdns_emitter emitter;
+        u2_mdns_emitter_init(&emitter, records.data(), (int)records.size(), 0, false);
         unsigned char out_msg[mdns_msg_size_max];
-        size_t out_size = u2_mdns_generate_unsolicited_announcement(records.data(), (int)records.size(), false, out_msg, msg_size_max);
-        if (out_size) {
+        for (;;) {
+            size_t out_size = u2_mdns_emitter_run(&emitter, out_msg, msg_ideal_size, msg_max_size);
+            if (!out_size)
+                break;
             net.send(std::span(out_msg, out_size));
             if (log_level >= 1) {
                 printf("### OUTPUT MSG - UNSOLICITED\n");

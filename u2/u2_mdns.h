@@ -22,9 +22,18 @@ U2_C_BEGIN
 
 /*** types ***/
 
-struct u2_dns_response_record {
+struct u2_mdns_response_record {
     enum u2_dns_rr_category category;
     const struct u2_dns_record *record;
+};
+
+struct u2_mdns_emitter {
+    // mandatory records first, optional records last
+    const struct u2_mdns_response_record *record_list;
+    int mandatory_record_count;
+    int optional_record_count;
+    int record_index;
+    bool tear_down;
 };
 
 struct u2_mdns_query_proc {
@@ -36,10 +45,11 @@ struct u2_mdns_query_proc {
     int question_count;
     int question_index;
 
-    struct u2_dns_response_record record_list[32];
+    struct u2_mdns_response_record record_list[32];
     int answer_record_count;
     int additional_record_count;
-    int record_index;
+
+    struct u2_mdns_emitter emitter;
 };
 
 
@@ -47,7 +57,9 @@ struct u2_mdns_query_proc {
 
 void u2_mdsn_query_proc_init(struct u2_mdns_query_proc *proc, const void *msg, size_t size, const struct u2_dns_database *database);
 size_t u2_mdns_query_proc_run(struct u2_mdns_query_proc *proc, void *out_msg, size_t ideal_size, size_t max_size);
-size_t u2_mdns_generate_unsolicited_announcement(const struct u2_dns_record **record_list, int record_count, bool tear_down, void *msg_out, size_t max_out);
+
+void u2_mdns_emitter_init(struct u2_mdns_emitter *emitter, const struct u2_mdns_response_record *record_list, int mandatory_record_count, int optional_record_count, bool tear_down);
+size_t u2_mdns_emitter_run(struct u2_mdns_emitter *emitter, void *out_msg, size_t ideal_size, size_t max_size);
 
 
 U2_C_END

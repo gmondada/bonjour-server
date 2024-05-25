@@ -106,7 +106,7 @@ void Bj_static_server::rx_data_handler(int interface_id, std::span<unsigned char
 
 void Bj_static_server::send_unsolicited_announcements()
 {
-    const struct u2_dns_record *record_list[8];
+    struct u2_mdns_response_record record_list[8];
     int record_count = 0;
 
     for (int i = 0; i < database.domain_count; i++) {
@@ -114,19 +114,32 @@ void Bj_static_server::send_unsolicited_announcements()
         for (int j = 0; j < domain->record_count; j++) {
             const struct u2_dns_record *record = domain->record_list[j];
             if (record->type == U2_DNS_RR_TYPE_PTR && record_count < U2_ARRAY_LEN(record_list)) {
-                record_list[record_count] = record;
+                struct u2_mdns_response_record r = {
+                    .category = U2_DNS_RR_CATEGORY_ANSWER,
+                    .record = record,
+                };
+                record_list[record_count] = r;
                 record_count++;
             }
         }
     }
 
     assert(mtu.mtu > 0);
-    size_t msg_size_max = mdns_msg_size_max - mtu.ip_header_size - mtu.udp_header_size;
+    size_t msg_mtu = U2_MIN(mdns_msg_size_max, mtu.mtu);
+    size_t msg_header_size = mtu.ip_header_size + mtu.udp_header_size;
+    assert(msg_header_size < msg_mtu);
+
+    size_t msg_ideal_size = msg_mtu - msg_header_size;
+    size_t msg_max_size = mdns_msg_size_max - msg_header_size;
 
     if (record_count) {
+        struct u2_mdns_emitter emitter;
+        u2_mdns_emitter_init(&emitter, record_list, record_count, 0, false);
         unsigned char out_msg[mdns_msg_size_max];
-        size_t out_size = u2_mdns_generate_unsolicited_announcement(record_list, record_count, false, out_msg, msg_size_max);
-        if (out_size) {
+        for (;;) {
+            size_t out_size = u2_mdns_emitter_run(&emitter, out_msg, msg_ideal_size, msg_max_size);
+            if (!out_size)
+                break;
             net.send(std::span(out_msg, out_size));
             if (log_level >= 1) {
                 printf("### OUTPUT MSG - UNSOLICITED\n");
